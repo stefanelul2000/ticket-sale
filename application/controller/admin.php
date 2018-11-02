@@ -4,6 +4,7 @@ class Admin extends Controller{
 		parent::__construct();
 		$this->auth();
 		$this->adminCheck();
+		$this->teammanagerCheck();
 	}
 
 	public function index(){

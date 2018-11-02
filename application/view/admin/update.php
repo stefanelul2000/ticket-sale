@@ -43,6 +43,7 @@
 									<td>
 										<input type="hidden" name="id" value="<?php echo $member->id;?>">
 										<div class="form-group">
+											<select class="form-control" name="new_rank">
 												<option value="">Choose New Role</option>
 												<option value="0">Cannot Login</option>
 												<option value="1">Can See Information</option>
