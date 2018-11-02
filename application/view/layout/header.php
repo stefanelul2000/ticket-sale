@@ -102,7 +102,7 @@
 					<?php if($user->rank >= 3){?>
 					<li class="header text-center">TEAM MANAGER</li>
 					<li <?php if($page == "stats"){?>class="active"<?php }?>>
-						<a href="<?php echo URL;?>admin/stats">
+						<a href="<?php echo URL;?>manager/stats">
 							<i class="fa fa-line-chart"></i> <span>Statistics</span>
 							<span class="pull-right-container">
 								<!--<small class="label pull-right bg-blue">1</small>-->
@@ -110,7 +110,7 @@
 						</a>
 					</li>
 					<li <?php if($page == "refund"){?>class="active"<?php }?>>
-						<a href="<?php echo URL;?>admin/refund">
+						<a href="<?php echo URL;?>manager/refund">
 							<i class="fa fa-undo"></i> <span>Refund Ticket</span>
 							<span class="pull-right-container">
 								<!--<small class="label pull-right bg-blue">1</small>-->
