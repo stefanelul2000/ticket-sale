@@ -85,7 +85,6 @@ class Admin extends Controller{
 		if(isset($_POST['generate'])){
 			$number = $this->protect($_POST['number']);
 			$i=1;
-			//include('../public/phpqrcode/qrlib.php');
 			while($i <= $number){
 				$qrcode = rand(100000, 999999);
 				if(!$this->model->isTicketExist($qrcode)){
@@ -96,31 +95,6 @@ class Admin extends Controller{
 			}
 			header('location:' . URL . 'admin/ticket');
 		}
-		/*
-		if(isset($_POST['download'])){
-			$from = $this->protect($_POST['from']);
-			$to = $this->protect($_POST['to']);
-			if($this->model->isQRExist($from) && $this->model->isQRExist($to)){
-				$files = [];
-				$codes = $this->model->fetchQRcodes($from, $to);
-				foreach($codes as $code){
-					array_push($files, $code->id.".png");
-				}
-				//$files = array('869372.png', '546539.png');
-				$zipname = "../public/zip/QRCODES-". $from . "-" . $to . ".zip";
-				$zip = new ZipArchive;
-				$zip->open($zipname, ZipArchive::CREATE);
-				$path = "../public/qr/";
-				foreach ($files as $file) {
-					$zip->addFile($path.$file, $file);
-				}
-				$zip->close();
-				header('location:' . URL . 'zip/QRCODES-'. $from . '-' . $to . '.zip');
-			}else{
-				$status = 1;
-			}
-		}
-		*/
 		require APP . 'view/layout/header.php';
 		require APP . 'view/admin/ticket.php';
 		require APP . 'view/layout/footer.php';

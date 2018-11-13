@@ -2,14 +2,15 @@
 <html>
 <head>
 	<!-- Global site tag (gtag.js) - Google Analytics -->
-	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-108238846-1"></script>
+	<script async src="https://www.googletagmanager.com/gtag/js?id=UA-84163647-2"></script>
 	<script>
 		window.dataLayer = window.dataLayer || [];
 		function gtag(){dataLayer.push(arguments);}
 		gtag('js', new Date());
 
-		gtag('config', 'UA-108238846-1');
+		gtag('config', 'UA-84163647-2');
 	</script>
+
 	
 	<link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png">
 	<link rel="icon" type="image/png" sizes="32x32" href="/favicons/favicon-32x32.png">
@@ -26,8 +27,8 @@
 	<link rel="stylesheet" href="<?php echo URL;?>lte/bootstrap/css/bootstrap.min.css">
 	<!-- <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/ionicons/2.0.1/css/ionicons.min.css"> -->
 	<link rel="stylesheet" href="<?php echo URL;?>lte/plugins/jvectormap/jquery-jvectormap-1.2.2.css">
-	<link rel="stylesheet" href="<?php echo URL;?>lte/dist/css/AdminLTE.css">
-	<link rel="stylesheet" href="<?php echo URL;?>lte/dist/css/skins/_all-skins.css">
+	<link rel="stylesheet" href="<?php echo URL;?>lte/dist/css/AdminLTE.min.css">
+	<link rel="stylesheet" href="<?php echo URL;?>lte/dist/css/skins/_all-skins.min.css">
 	<link rel="stylesheet" href="<?php echo URL;?>lte/bootstrap/css/font-awesome.min.css">
 	<link rel="stylesheet" href="<?php echo URL;?>lte/plugins/datepicker/datepicker3.css">
 	<!-- <link rel="stylesheet" href="{{asset('lte/plugins/daterangepicker/daterangepicker.css')}}"> -->
