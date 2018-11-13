@@ -4,15 +4,11 @@
 This is a small website I created for school events. It made ticket selling way easyer and quicker. 
 
 ## Screenshots
-<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/home-screen.png" width="40%">
-<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/sale-ticket.png" width="40%">
-<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/check-ticket.png" width="40%">
-<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/Statistics.png" width="40%">
-<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/refund-ticket.png" width="40%">
-<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/create-team-member.png" width="40%">
-<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/update-rank.png" width="40%">
-<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/generate-tickets.png" width="40%">
-<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/add-school" width="40%">
+<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/home-screen.png" width="40%"> <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/sale-ticket.png" width="40%">
+<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/check-ticket.png" width="40%"> <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/Statistics.png" width="40%">
+<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/refund-ticket.png" width="40%"> <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/create-team-member.png" width="40%">
+<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/update-rank.png" width="40%"> <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/generate-tickets.png" width="40%">
+<img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/add-school.png" width="100%">
 
 ## Feautures
 
@@ -33,12 +29,12 @@ You upload the files to the webserver and set the root folder to /public. Then y
 Lastly in order to finalise the connection between the database and the website you need to input the database info in /application/config/config.php
 You should modify the following information only:
 ```php
->define('DB_TYPE', 'mysql');
->define('DB_HOST', '127.0.0.1');
->define('DB_NAME', 'name');
->define('DB_USER', 'user');
->define('DB_PASS', 'db_pass');
->define('DB_CHARSET', 'utf8');
+define('DB_TYPE', 'mysql');
+define('DB_HOST', '127.0.0.1');
+define('DB_NAME', 'name');
+define('DB_USER', 'user');
+define('DB_PASS', 'db_pass');
+define('DB_CHARSET', 'utf8');
 ```
 
 
