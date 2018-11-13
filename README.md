@@ -5,6 +5,7 @@ This is a small website I created for school events. It made ticket selling way 
 
 ## Screenshots
 <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/home-screen.png" width="100%">
+
 <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/sale-ticket.png" width="40%"> <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/check-ticket.png" width="40%">
 <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/Statistics.png" width="40%"> <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/refund-ticket.png" width="40%">
 <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/create-team-member.png" width="40%"> <img src="https://stefanelul2000.github.io/ticket-sale/Screenshots/update-rank.png" width="40%">
