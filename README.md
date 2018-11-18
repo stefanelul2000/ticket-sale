@@ -37,7 +37,8 @@ define('DB_USER', 'user');
 define('DB_PASS', 'db_pass');
 define('DB_CHARSET', 'utf8');
 ```
-
+The default user and password are admin/admin. </br>
+You can simply change them afterwords.
 
 ## Credits
 For his help with CSS and BBF flat style.<br/>
