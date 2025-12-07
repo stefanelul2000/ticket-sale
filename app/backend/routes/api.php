@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\Route;
 Route::get('/setup/status', [SetupController::class, 'status']);
 Route::post('/setup', [SetupController::class, 'create']);
 Route::post('/setup/logo', [SetupController::class, 'uploadLogo']);
+Route::post('/setup/migrate', [SetupController::class, 'migrate']);
 
 Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
     Route::get('/me', function (Request $request) {

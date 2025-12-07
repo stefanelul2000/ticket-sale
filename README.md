@@ -14,8 +14,8 @@ docker compose up -d
 ```
 - Frontend: http://localhost:8080
 - API: http://localhost:8080/api
-- Containers: `ticket-sale-app` (php-fpm), `ticket-sale-web` (nginx), `ticket-sale-db` (mysql), `ticket-sale-redis` (redis).
-- On start, migrates/seeds roles automatically.
+- Containers: `ticket-sale-app` (nginx+php-fpm), `ticket-sale-db` (mysql), `ticket-sale-redis` (redis).
+- On first start, migrates/seeds once; thereafter skipped (uses `/config/.provisioned`).
 
 ## Setup flow (first run)
 1) Open the SPA; setup wizard appears if no admin exists.
@@ -46,6 +46,20 @@ php artisan db:seed
 - Events, ticket types, user/role admin; branding (logo/colors).
 - Redis-backed sessions/cache (in Docker).
 - Health endpoint: `GET /api/health`.
+
+## CI/CD (GHCR)
+- Workflow: `.github/workflows/docker-publish.yml`
+- Image: `ghcr.io/<owner>/ticket-sale:latest`
+- Push on commits to `main/master` and tags `v*`/`release-*`.
+- Requires no extra secrets; uses `GITHUB_TOKEN` to push to GHCR in the same org/user.
+
+## Production deploy
+1) Run `docker compose -f docker/docker-compose.yml up -d --build`.
+2) Browse to the app; the setup wizard appears by design.
+3) Complete setup (DB creds, admin user, optional SMTP/branding). The container seeds base roles/permissions automatically and runs migrations on start.
+4) Branding/settings are shared for all users and stored in the DB.
+
+> Note: The provided `docker-compose.yml` uses placeholder host bind paths for `/var/www/html/storage` and `/config`. Replace `/host/path/ticket-sale/storage` and `/host/path/ticket-sale/config` with real paths on your host before deploying.
 
 ## phpMyAdmin (optional, manual run)
 ```bash

@@ -1,35 +1,23 @@
 services:
   app:
     container_name: ticket-sale-app
-    build:
-      context: ../app
-      dockerfile: ../docker/Dockerfile
-    volumes:
-      - ../app/backend:/var/www/html
-    env_file:
-      - ../app/backend/.env
+    image: ghcr.io/stefanelul2000/ticket-sale:dev-latest
+    ports:
+      - "8080:80"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: sync
+      VITE_API_URL: https://ticket.domain.com/api
     depends_on:
       - db
       - redis
     working_dir: /var/www/html
-    command: >
-      sh -c "
-      php -r 'for ($$i = 0; $$i < 60; $$i++) { if (@fsockopen(\"db\", 3306)) { exit(0);} sleep(1);} exit(1);' &&
-      php artisan migrate --force &&
-      php artisan db:seed --force &&
-      php-fpm
-      "
-
-  web:
-    container_name: ticket-sale-web
-    image: nginx:1.27-alpine
-    ports:
-      - "8080:80"
     volumes:
-      - ../app/backend:/var/www/html:ro
-      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
-    depends_on:
-      - app
+      - /host/path/ticket-sale/storage:/var/www/html/storage
+      - /host/path/ticket-sale/config:/config
 
   db:
     container_name: ticket-sale-db

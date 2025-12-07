@@ -6,6 +6,7 @@ use App\Models\Permission;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -131,6 +132,29 @@ class SetupController extends Controller
         ]);
 
         return response()->json(['created' => true, 'user' => $user]);
+    }
+
+    public function migrate(Request $request)
+    {
+        // Allow only when an admin exists (setup completed) OR when explicitly requested right after setup.
+        $adminExists = User::where('role_id', '>=', 5)->exists();
+        if (! $adminExists) {
+            throw new AccessDeniedHttpException('Setup not completed.');
+        }
+
+        try {
+            // Ensure current connection works before migrating.
+            DB::connection()->getPdo();
+            Artisan::call('migrate', ['--force' => true]);
+            Artisan::call('db:seed', ['--force' => true]);
+            return response()->json(['migrated' => true]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'migrated' => false,
+                'message' => 'Migration failed',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
     }
 
     public function uploadLogo(Request $request)
