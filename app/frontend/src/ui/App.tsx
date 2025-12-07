@@ -54,7 +54,7 @@ export function App() {
   const canManageEvents = roleId >= 4; // event manager or above
   const canSell = roleId >= 3;
   const canCheckin = roleId >= 2 && roleId !== 3; // seller (3) should not check-in
-  const { setTheme, logoUrl } = useTheme();
+  const { setTheme, logoUrl, primary, secondary, background } = useTheme();
   const [form, setForm] = useState({ username: '', password: '', remember: true });
   const [stats, setStats] = useState<Stats | null>(null);
   const [sellTicket, setSellTicket] = useState({ ticket: '', name: '' });
@@ -91,9 +91,13 @@ export function App() {
   const [ticketTypes, setTicketTypes] = useState<TicketTypeModel[]>([]);
   const [newEvent, setNewEvent] = useState({ name: '', capacity: '' });
   const [newTicketType, setNewTicketType] = useState({ event_id: '', name: '', price: '', kind: 'paid' });
+  const [showAddTicketType, setShowAddTicketType] = useState(false);
+  const [ticketTypeEdits, setTicketTypeEdits] = useState<Record<number, { editing: boolean; name: string; price: number | string; kind: string; event_id: number }>>({});
+  const [ticketTypeFilter, setTicketTypeFilter] = useState<string>('');
   const [ticketGenerateByEvent, setTicketGenerateByEvent] = useState<Record<number, { ticket_type_id: string; count: string; open: boolean }>>({});
   const [eventEdits, setEventEdits] = useState<Record<number, { editing: boolean; name: string; capacity: string }>>({});
   const [showAddEvent, setShowAddEvent] = useState(false);
+  const [brandDraft, setBrandDraft] = useState({ primary, secondary, background });
   const [users, setUsers] = useState<UserModel[]>([]);
   const [invite, setInvite] = useState({ name: '', email: '', username: '', password: '', role_id: '3' });
   const [adminSection, setAdminSection] = useState<'branding' | 'users' | 'roles' | 'impersonate'>('branding');
@@ -135,6 +139,66 @@ export function App() {
   ];
 
   const mailHint = 'Optional: leave blank to log emails; fill to use SMTP.';
+  const applyThemeVars = (p: string, s: string, b: string) => {
+    document.documentElement.style.setProperty('--accent', p);
+    document.documentElement.style.setProperty('--accent-2', s);
+    document.documentElement.style.setProperty('--bg', b);
+  };
+
+  const getContrastText = (hex: string) => {
+    const n = hex.replace('#', '');
+    if (n.length !== 6) return '#0b101a';
+    const r = parseInt(n.substring(0, 2), 16);
+    const g = parseInt(n.substring(2, 4), 16);
+    const b = parseInt(n.substring(4, 6), 16);
+    const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return lum > 0.6 ? '#0b101a' : '#f8f9ff';
+  };
+
+  // Re-apply persisted theme variables on load and whenever they change
+  useEffect(() => {
+    applyThemeVars(primary, secondary, background);
+  }, [primary, secondary, background]);
+
+  // Fetch shared branding so all users see the same theme
+  useEffect(() => {
+    api.branding()
+      .then((b) => {
+        if (b?.primary || b?.secondary || b?.background || b?.logoUrl !== undefined) {
+          setTheme({
+            primary: b.primary ?? primary,
+            secondary: b.secondary ?? secondary,
+            background: b.background ?? background,
+            logoUrl: b.logoUrl ?? logoUrl,
+          });
+          setBrandDraft({
+            primary: b.primary ?? primary,
+            secondary: b.secondary ?? secondary,
+            background: b.background ?? background,
+          });
+          applyThemeVars(b.primary ?? primary, b.secondary ?? secondary, b.background ?? background);
+        }
+      })
+      .catch(() => {
+        // ignore fetch errors; fallback to stored theme
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const uploadLogo = async (file: File) => {
+    setSetupError(null);
+    const formData = new FormData();
+    formData.append('logo', file);
+    try {
+      const res = await api.uploadLogo(formData);
+      setTheme({ logoUrl: res.url });
+      setLogoFileName(file.name);
+      showToast('Logo uploaded.');
+    } catch (err: any) {
+      const msg = err?.response?.data?.message || 'Logo upload failed';
+      showToast(msg);
+    }
+  };
 
   const isLoading = (key: string) => Boolean(loadingKeys[key]);
 
@@ -345,6 +409,10 @@ export function App() {
   }, [fetchMe]);
 
   useEffect(() => {
+    setBrandDraft({ primary, secondary, background });
+  }, [primary, secondary, background]);
+
+  useEffect(() => {
     if (checkedSetup) return;
     api
       .setupStatus()
@@ -438,6 +506,10 @@ export function App() {
 
   const handleVerify = async () => {
     if (!verifyNumber || !user) return;
+    if (!verifyNumber.includes('_')) {
+      showToast('Please scan/enter the full ticket code (e.g., 4_001).');
+      return;
+    }
     const actionTime = new Date().toLocaleTimeString();
     try {
       const res = await api.verify(verifyNumber);
@@ -453,6 +525,10 @@ export function App() {
   const handleCheckin = async (ticketNumber?: string | number) => {
     const target = ticketNumber !== undefined ? String(ticketNumber) : verifyNumber || null;
     if (!target || !user) return;
+    if (!target.includes('_')) {
+      showToast('Please scan/enter the full ticket code (e.g., 4_001).');
+      return;
+    }
     const actionTime = new Date().toLocaleTimeString();
     try {
       await api.checkin(target);
@@ -562,10 +638,13 @@ export function App() {
           </Button>
         </>
       )}
-      <div style={{ color: 'var(--muted)', fontSize: 14 }}>
-        Hi, {user.name || (user as any)?.username || 'User'}
-      </div>
-      <Button variant="ghost" onClick={logout}>
+      {/* Hidden logout button for dropdown trigger */}
+      <Button
+        className="logout-desktop"
+        variant="ghost"
+        onClick={logout}
+        style={{ display: 'none' }}
+      >
         Logout
       </Button>
     </div>
@@ -929,9 +1008,12 @@ export function App() {
               <input
                 placeholder="https://..."
                 value={logoUrl}
-                onChange={(e) => setTheme({ logoUrl: e.target.value })}
-                style={inputStyle}
-              />
+                      onChange={(e) => {
+                        setTheme({ logoUrl: e.target.value });
+                        api.saveBranding({ primary: brandDraft.primary, secondary: brandDraft.secondary, background: brandDraft.background, logoUrl: e.target.value });
+                      }}
+                    style={inputStyle}
+                  />
               <label style={{ color: 'var(--muted)' }}>Or upload a logo</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <label
@@ -1398,94 +1480,233 @@ export function App() {
         case 'tickets':
           return (
             <Card title="Ticket Types">
-              <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 100px 100px', gap: 8 }}>
-                  <select
-                    value={newTicketType.event_id}
-                    onChange={(e) => setNewTicketType({ ...newTicketType, event_id: e.target.value })}
-                    style={{ ...inputStyle, background: 'rgba(255,255,255,0.03)' }}
-                  >
-                    <option value="">Event</option>
-                    {events.map((ev) => (
-                      <option key={ev.id} value={ev.id}>
-                        {ev.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    placeholder="Name"
-                    value={newTicketType.name}
-                    onChange={(e) => setNewTicketType({ ...newTicketType, name: e.target.value })}
-                    style={inputStyle}
-                  />
-                  <select
-                    value={newTicketType.kind}
-                    onChange={(e) => setNewTicketType({ ...newTicketType, kind: e.target.value })}
-                    style={{ ...inputStyle, background: 'rgba(255,255,255,0.03)' }}
-                  >
-                    <option value="paid">Paid</option>
-                    <option value="free">Free</option>
-                    <option value="donation">Donation</option>
-                    <option value="tiered">Tiered</option>
-                  </select>
-                  <input
-                    placeholder="Price"
-                    value={newTicketType.price}
-                    onChange={(e) => setNewTicketType({ ...newTicketType, price: e.target.value })}
-                    style={inputStyle}
-                  />
-                  <Button
-                    onClick={async () => {
-                      if (!newTicketType.event_id || !newTicketType.name) return;
-                      const created = await api.createTicketType({
-                        ...newTicketType,
-                        price: Number(newTicketType.price) || 0,
-                        event_id: Number(newTicketType.event_id),
-                      });
-                      setTicketTypes((prev) => [...prev, created]);
-                      setNewTicketType({ event_id: '', name: '', price: '', kind: 'paid' });
-                      const evName = events.find((e) => String(e.id) === String(created.event_id))?.name || 'event';
-                      showToast(`Ticket type "${created.name}" added to "${evName}".`);
-                    }}
-                  >
-                    Add
-                  </Button>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 10 }}>
+                <Button variant="ghost" onClick={() => setShowAddTicketType((v) => !v)}>
+                  {showAddTicketType ? 'Close' : 'Add ticket type'}
+                </Button>
+              </div>
+              <div style={{ display: 'flex', gap: 10, marginBottom: 8, alignItems: 'center' }}>
+                <label style={{ color: 'var(--muted)', fontSize: 13 }}>Filter by event:</label>
+                <select
+                  value={ticketTypeFilter}
+                  onChange={(e) => setTicketTypeFilter(e.target.value)}
+                  style={{ ...inputStyle, width: 220, background: 'rgba(255,255,255,0.03)' }}
+                >
+                  <option value="">All events</option>
+                  {events.map((ev) => (
+                    <option key={ev.id} value={ev.id}>
+                      {ev.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {showAddTicketType && (
+                <div style={{ display: 'grid', gap: 10, marginBottom: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 100px 100px', gap: 8 }}>
+                    <select
+                      value={newTicketType.event_id}
+                      onChange={(e) => setNewTicketType({ ...newTicketType, event_id: e.target.value })}
+                      style={{ ...inputStyle, background: 'rgba(255,255,255,0.03)' }}
+                    >
+                      <option value="">Event</option>
+                      {events.map((ev) => (
+                        <option key={ev.id} value={ev.id}>
+                          {ev.name}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      placeholder="Name"
+                      value={newTicketType.name}
+                      onChange={(e) => setNewTicketType({ ...newTicketType, name: e.target.value })}
+                      style={inputStyle}
+                    />
+                    <select
+                      value={newTicketType.kind}
+                      onChange={(e) => {
+                        const nextKind = e.target.value;
+                        setNewTicketType({
+                          ...newTicketType,
+                          kind: nextKind,
+                          price: nextKind === 'free' ? '0' : newTicketType.price,
+                        });
+                      }}
+                      style={{ ...inputStyle, background: 'rgba(255,255,255,0.03)' }}
+                    >
+                      <option value="paid">Paid</option>
+                      <option value="free">Free</option>
+                      <option value="donation">Donation</option>
+                      <option value="tiered">Tiered</option>
+                    </select>
+                    <input
+                      placeholder="Price"
+                      value={newTicketType.price}
+                      onChange={(e) => setNewTicketType({ ...newTicketType, price: e.target.value })}
+                      disabled={newTicketType.kind === 'free'}
+                      style={inputStyle}
+                    />
+                    <Button
+                      onClick={async () => {
+                        if (!newTicketType.event_id || !newTicketType.name) return;
+                        const created = await api.createTicketType({
+                          ...newTicketType,
+                          price: Number(newTicketType.price) || 0,
+                          event_id: Number(newTicketType.event_id),
+                        });
+                        setTicketTypes((prev) => [...prev, created]);
+                        setNewTicketType({ event_id: '', name: '', price: '', kind: 'paid' });
+                        setShowAddTicketType(false);
+                        const evName = events.find((e) => String(e.id) === String(created.event_id))?.name || 'event';
+                        showToast(`Ticket type "${created.name}" added to "${evName}".`);
+                      }}
+                    >
+                      Add
+                    </Button>
+                  </div>
                 </div>
+              )}
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr auto', gap: 8, alignItems: 'center', padding: '6px 10px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)', color: 'var(--muted)', fontSize: 13, marginBottom: 8 }}>
+                <div>Event</div>
+                <div>Name</div>
+                <div>Type / Price</div>
+                <div style={{ textAlign: 'right' }}>Actions</div>
               </div>
               <div style={{ display: 'grid', gap: 8 }}>
-                {ticketTypes.map((tt) => {
+                {ticketTypes
+                  .filter((tt) => !ticketTypeFilter || String(tt.event_id) === ticketTypeFilter)
+                  .map((tt) => {
                   const saving = isLoading(`save-ticket-${tt.id}`);
                   const deleting = isLoading(`delete-ticket-${tt.id}`);
-                  return (
-                  <div key={tt.id} style={{ display: 'grid', gridTemplateColumns: '1fr 120px 80px auto', gap: 8, alignItems: 'center' }}>
+                  const eventName = events.find((ev) => ev.id === tt.event_id)?.name || '—';
+                  const editState = ticketTypeEdits[tt.id];
+                  const isEditing = editState?.editing;
+                  const displayKind = isEditing ? editState?.kind ?? tt.kind : tt.kind;
+                  const displayPrice = displayKind === 'free' ? 0 : isEditing ? editState?.price ?? tt.price : tt.price;
+                return (
+                <div key={tt.id} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 0.8fr auto', gap: 8, alignItems: 'center', border: '1px solid var(--border)', borderRadius: 10, padding: '8px 10px', background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ color: 'var(--muted)', fontSize: 13, padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.02)' }}>
+                    {eventName}
+                  </div>
+                  {isEditing ? (
                     <input
-                      value={tt.name}
-                      onChange={(e) => setTicketTypes((prev) => prev.map((x) => (x.id === tt.id ? { ...x, name: e.target.value } : x)))}
+                      value={editState?.name ?? tt.name}
+                      onChange={(e) =>
+                        setTicketTypeEdits((prev) => ({
+                          ...prev,
+                          [tt.id]: { ...(prev[tt.id] || { editing: true, price: tt.price, kind: tt.kind, name: tt.name }), name: e.target.value },
+                        }))
+                      }
                       style={inputStyle}
                     />
-                    <div style={{ color: 'var(--muted)' }}>{tt.kind}</div>
-                    <input
-                      value={tt.price}
-                      onChange={(e) => setTicketTypes((prev) => prev.map((x) => (x.id === tt.id ? { ...x, price: Number(e.target.value) || 0 } : x)))}
-                      style={inputStyle}
-                    />
-                    <div style={{ display: 'flex', gap: 6 }}>
-                      <Button
-                        variant="ghost"
-                        disabled={saving}
-                        onClick={async () => {
-                          await withLoading(`save-ticket-${tt.id}`, async () => {
-                            const updated = await api.updateTicketType(tt.id, { name: tt.name, price: tt.price });
-                            setTicketTypes((prev) => prev.map((x) => (x.id === tt.id ? updated : x)));
-                            showToast(`Saved ticket type "${updated.name}".`);
-                          });
+                  ) : (
+                    <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.03)', color: 'var(--text)' }}>
+                      {tt.name}
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    {isEditing ? (
+                      <select
+                        value={displayKind}
+                        onChange={(e) => {
+                          const nextKind = e.target.value;
+                          setTicketTypeEdits((prev) => ({
+                            ...prev,
+                            [tt.id]: {
+                              ...(prev[tt.id] || { editing: true, name: tt.name, price: tt.price, kind: tt.kind }),
+                              kind: nextKind,
+                              price: nextKind === 'free' ? 0 : prev[tt.id]?.price ?? tt.price,
+                              editing: true,
+                            },
+                          }));
                         }}
+                        style={{ ...inputStyle, background: 'rgba(255,255,255,0.03)', width: 140 }}
                       >
-                        {saving ? 'Saving...' : 'Save'}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        disabled={deleting}
+                        <option value="paid">Paid</option>
+                        <option value="free">Free</option>
+                        <option value="donation">Donation</option>
+                        <option value="tiered">Tiered</option>
+                      </select>
+                    ) : (
+                      <div style={{ color: 'var(--muted)', padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.03)' }}>
+                        {tt.kind}
+                      </div>
+                    )}
+                    {isEditing ? (
+                      <input
+                          value={displayPrice}
+                          onChange={(e) =>
+                            setTicketTypeEdits((prev) => ({
+                              ...prev,
+                              [tt.id]: {
+                                ...(prev[tt.id] || { editing: true, name: tt.name, price: tt.price, kind: tt.kind }),
+                                price: e.target.value,
+                              },
+                            }))
+                          }
+                          style={{ ...inputStyle, width: 110 }}
+                          disabled={displayKind === 'free'}
+                        />
+                    ) : (
+                      <div style={{ padding: '10px 12px', borderRadius: 10, border: '1px solid var(--border)', background: 'rgba(255,255,255,0.03)', color: 'var(--text)', minWidth: 80, textAlign: 'center' }}>
+                        {displayPrice}
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Button
+                      variant="ghost"
+                      disabled={saving}
+                      onClick={async () => {
+                        const current = ticketTypeEdits[tt.id];
+                        if (!current?.editing) {
+                          setTicketTypeEdits((prev) => ({
+                            ...prev,
+                            [tt.id]: { editing: true, name: tt.name, price: tt.price, kind: tt.kind, event_id: tt.event_id },
+                          }));
+                          return;
+                        }
+                        if (!current.name.trim()) {
+                          showToast('Ticket type name is required.');
+                          return;
+                        }
+                        const payloadKind = current.kind || tt.kind;
+                        let payloadPrice = payloadKind === 'free' ? 0 : Number(current.price);
+                        if (!Number.isFinite(payloadPrice) || payloadPrice < 0) {
+                          showToast('Price must be zero or a positive number.');
+                          return;
+                        }
+                        await withLoading(`save-ticket-${tt.id}`, async () => {
+                          try {
+                            const updated = await api.updateTicketType(tt.id, {
+                              name: current.name.trim(),
+                              price: payloadPrice,
+                              kind: payloadKind,
+                              event_id: current.event_id || tt.event_id,
+                            });
+                            setTicketTypes((prev) => prev.map((x) => (x.id === tt.id ? updated : x)));
+                            setTicketTypeEdits((prev) => ({
+                              ...prev,
+                              [tt.id]: {
+                                editing: false,
+                                name: updated.name,
+                                price: updated.price,
+                                kind: updated.kind,
+                                event_id: updated.event_id,
+                              },
+                            }));
+                            showToast(`Saved ticket type "${updated.name}".`);
+                          } catch (err: any) {
+                            const msg = err?.response?.data?.message || 'Failed to save ticket type.';
+                            showToast(msg);
+                          }
+                        });
+                      }}
+                    >
+                      {isEditing ? (saving ? 'Saving...' : 'Save') : 'Edit'}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={deleting}
                         onClick={() =>
                           setModal({
                             title: 'Delete ticket type',
@@ -1563,14 +1784,111 @@ export function App() {
         case 'branding':
           return (
             <Card title="Branding">
-              <ThemeControls allowed />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, color: 'var(--muted)' }}>
-                <div>Logo preview:</div>
-                {logoUrl ? (
-                  <img src={logoUrl} alt="Logo" style={{ height: 32 }} />
-                ) : (
-                  <div style={{ height: 32, width: 32, background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', borderRadius: 8 }} />
-                )}
+              <div style={{ display: 'grid', gap: 16, gridTemplateColumns: '1.2fr 1fr', alignItems: 'start' }}>
+                <div style={{ display: 'grid', gap: 12, padding: 16, border: '1px solid var(--border)', borderRadius: 12, background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text)' }}>Theme colors</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      <label style={{ color: 'var(--muted)', fontSize: 13 }}>Primary</label>
+                      <input
+                        type="color"
+                        value={brandDraft.primary}
+                        onChange={(e) => setBrandDraft((prev) => ({ ...prev, primary: e.target.value }))}
+                        style={colorStyle}
+                      />
+                    </div>
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      <label style={{ color: 'var(--muted)', fontSize: 13 }}>Secondary</label>
+                      <input
+                        type="color"
+                        value={brandDraft.secondary}
+                        onChange={(e) => setBrandDraft((prev) => ({ ...prev, secondary: e.target.value }))}
+                        style={colorStyle}
+                      />
+                    </div>
+                    <div style={{ display: 'grid', gap: 6 }}>
+                      <label style={{ color: 'var(--muted)', fontSize: 13 }}>Background</label>
+                      <input
+                        type="color"
+                        value={brandDraft.background}
+                        onChange={(e) => setBrandDraft((prev) => ({ ...prev, background: e.target.value }))}
+                        style={colorStyle}
+                      />
+                    </div>
+                  </div>
+                  <Button
+                    onClick={() => {
+                      applyThemeVars(brandDraft.primary, brandDraft.secondary, brandDraft.background);
+                      const payload = {
+                        primary: brandDraft.primary,
+                        secondary: brandDraft.secondary,
+                        background: brandDraft.background,
+                      };
+                      setTheme(payload);
+                      api.saveBranding({ ...payload, logoUrl });
+                      showToast('Branding saved.');
+                    }}
+                    style={{
+                      width: 'fit-content',
+                      background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
+                      color: getContrastText(brandDraft.primary),
+                      boxShadow: '0 12px 28px rgba(0,0,0,0.25)',
+                      padding: '10px 14px',
+                      borderRadius: 12,
+                      border: '1px solid rgba(255,255,255,0.08)',
+                    }}
+                  >
+                    Save branding
+                  </Button>
+                </div>
+
+                <div style={{ display: 'grid', gap: 10, padding: 12, border: '1px solid var(--border)', borderRadius: 12, background: 'rgba(255,255,255,0.02)' }}>
+                  <div style={{ fontWeight: 700, color: 'var(--text)' }}>Logo</div>
+                  <input
+                    placeholder="Logo URL"
+                    value={logoUrl}
+                    onChange={(e) => setTheme({ logoUrl: e.target.value })}
+                    style={inputStyle}
+                  />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <label
+                      htmlFor="logo-upload-admin"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '10px 14px',
+                        borderRadius: 12,
+                        background: 'linear-gradient(135deg, var(--accent), var(--accent-2))',
+                        color: getContrastText(brandDraft.primary),
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        boxShadow: '0 12px 28px rgba(0,0,0,0.25)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                      }}
+                    >
+                      Upload logo
+                    </label>
+                    <span style={{ color: 'var(--muted)', fontSize: 14 }}>
+                      {logoFileName || 'No file chosen'}
+                    </span>
+                    <input
+                      id="logo-upload-admin"
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={(e) => e.target.files && uploadLogo(e.target.files[0])}
+                    />
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                    <div style={{ color: 'var(--muted)' }}>Preview:</div>
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="Logo" style={{ height: 40, maxWidth: 160, objectFit: 'contain' }} />
+                    ) : (
+                      <div style={{ height: 40, width: 40, background: 'linear-gradient(135deg, var(--accent), var(--accent-2))', borderRadius: 8 }} />
+                    )}
+                  </div>
+                </div>
               </div>
             </Card>
           );
@@ -1984,7 +2302,11 @@ export function App() {
                       {verifyResult.checkin ? 'Checked in' : 'Valid'}
                     </div>
                     <div>{verifyResult.ticket_code || verifyResult.ticket_number}</div>
-                    <div>{verifyResult.name || 'Unnamed'}</div>
+                    <div>
+                      {verifyResult.sold_at
+                        ? (verifyResult.name || 'Sold ticket')
+                        : 'Valid, not sold'}
+                    </div>
                   </div>
                 )}
                 {showHistory && (
@@ -2067,4 +2389,13 @@ const inputStyle: React.CSSProperties = {
   border: '1px solid var(--border)',
   background: 'rgba(255,255,255,0.03)',
   color: 'var(--text)',
+};
+const colorStyle: React.CSSProperties = {
+  width: 120,
+  height: 36,
+  padding: 0,
+  borderRadius: 10,
+  border: '1px solid var(--border)',
+  background: 'rgba(255,255,255,0.06)',
+  cursor: 'pointer',
 };

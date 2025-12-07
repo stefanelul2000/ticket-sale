@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const fallbackHost = `${window.location.protocol}//${window.location.hostname}:8080/api`;
 const client = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8080/api',
+  // Use VITE_API_URL if set; otherwise resolve to current host so non-local clients (e.g., 10.0.10.14) work.
+  baseURL: import.meta.env.VITE_API_URL || fallbackHost,
   withCredentials: true,
 });
 
@@ -20,6 +22,8 @@ export const api = {
   setup: (payload: any) => client.post('/setup', payload).then((r) => r.data),
   uploadLogo: (formData: FormData) =>
     client.post('/setup/logo', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  branding: () => client.get('/branding').then((r) => r.data),
+  saveBranding: (payload: any) => client.post('/branding', payload).then((r) => r.data),
   tickets: () => client.get('/tickets').then((r) => r.data),
   verify: (ticketNumber: string) => client.get(`/tickets/${ticketNumber}/verify`).then((r) => r.data),
   checkin: (ticketNumber: string) => client.post(`/tickets/${ticketNumber}/checkin`),

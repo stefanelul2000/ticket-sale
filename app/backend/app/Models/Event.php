@@ -37,16 +37,6 @@ class Event extends Model
         return $this->hasMany(TicketType::class);
     }
 
-    public function products()
-    {
-        return $this->hasMany(Product::class);
-    }
-
-    public function promoCodes()
-    {
-        return $this->hasMany(PromoCode::class);
-    }
-
     public function tickets()
     {
         return $this->hasMany(Ticket::class);

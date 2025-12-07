@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Event;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class EventController extends Controller
@@ -22,7 +23,7 @@ class EventController extends Controller
     public function store(Request $request)
     {
         $data = $this->validated($request);
-        $data['slug'] = $data['slug'] ?? Str::slug($data['name']);
+        $data['slug'] = $this->uniqueSlug($data['slug'] ?? $data['name']);
         $event = Event::create($data);
         return response()->json(
             $event->loadCount([
@@ -44,10 +45,10 @@ class EventController extends Controller
         // Enforce capacity not below generated/sold counts
         if (array_key_exists('capacity', $data) && $data['capacity'] !== null) {
             $counts = $event->tickets()
-                ->selectRaw('count(*) as generated, sum(case when sold_at is not null then 1 else 0 end) as sold')
+                ->selectRaw('count(*) as generated_count, sum(case when sold_at is not null then 1 else 0 end) as sold_count')
                 ->first();
-            $generated = (int) ($counts->generated ?? 0);
-            $sold = (int) ($counts->sold ?? 0);
+            $generated = (int) ($counts->generated_count ?? 0);
+            $sold = (int) ($counts->sold_count ?? 0);
             if ($data['capacity'] < $generated || $data['capacity'] < $sold) {
                 return response()->json([
                     'message' => 'Capacity cannot be less than tickets already generated or sold.',
@@ -58,7 +59,7 @@ class EventController extends Controller
         }
 
         if (! isset($data['slug']) && isset($data['name'])) {
-            $data['slug'] = Str::slug($data['name']);
+            $data['slug'] = $this->uniqueSlug($data['name'], $eventId);
         }
         $event->update($data);
         return $event->fresh()->loadCount([
@@ -73,8 +74,30 @@ class EventController extends Controller
     public function destroy(int $eventId)
     {
         $event = Event::findOrFail($eventId);
-        $event->delete();
+        DB::transaction(function () use ($event) {
+            // Hard delete everything related to this event.
+            $event->tickets()->withTrashed()->forceDelete();
+            $event->ticketTypes()->withTrashed()->forceDelete();
+            $event->forceDelete();
+        });
         return response()->json(['deleted' => true]);
+    }
+
+    private function uniqueSlug(string $base, ?int $ignoreId = null): string
+    {
+        $slugBase = Str::slug($base) ?: Str::random(6);
+        $slug = $slugBase;
+        $i = 1;
+        while (
+            Event::withTrashed()
+                ->where('slug', $slug)
+                ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
+                ->exists()
+        ) {
+            $slug = $slugBase . '-' . $i;
+            $i++;
+        }
+        return $slug;
     }
 
     private function validated(Request $request, ?int $id = null): array

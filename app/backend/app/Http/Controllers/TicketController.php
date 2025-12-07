@@ -181,10 +181,6 @@ class TicketController extends Controller
 
     private function findTicketByCode(string $input): ?Ticket
     {
-        $numeric = ctype_digit($input) ? (int) $input : null;
-
-        return Ticket::where('ticket_code', $input)
-            ->when($numeric, fn ($q) => $q->orWhere('ticket_number', $numeric))
-            ->first();
+        return Ticket::where('ticket_code', $input)->first();
     }
 }

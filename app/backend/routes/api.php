@@ -2,13 +2,12 @@
 
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\PermissionController;
-use App\Http\Controllers\ProductController;
-use App\Http\Controllers\PromoCodeController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketTypeController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\BrandingController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -60,6 +59,8 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
             ]);
             return response()->json(['impersonating' => $data['role_id']]);
         })->middleware('forbid.impersonation.targets');
+
+        Route::post('/branding', [BrandingController::class, 'update']);
     });
 
     // Event manager (role >=4) can manage events/products/ticket types/promos and ticket generation
@@ -111,6 +112,9 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
         return response()->json(['impersonating' => null]);
     });
 });
+
+// Public branding (shared across all users)
+Route::get('/branding', [BrandingController::class, 'show']);
 
 Route::get('/health', function () {
     return response()->json([

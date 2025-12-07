@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTheme } from '../../state/useTheme';
 
 type Props = {
@@ -8,9 +8,21 @@ type Props = {
   sidebar?: ReactNode;
 };
 
+type AccountMenuProps = { isMobile: boolean; show: boolean; toggle: () => void };
+
 export function Layout({ children, header, sidebar }: Props) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const { logoUrl } = useTheme();
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  // Responsive flag
+  useEffect(() => {
+    const update = () => setIsMobile(window.innerWidth <= 900);
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, []);
 
   const Brand = (
     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -38,76 +50,90 @@ export function Layout({ children, header, sidebar }: Props) {
       style={{
         minHeight: '100vh',
         color: 'var(--text)',
-        padding: 24,
+        padding: isMobile ? 12 : 24,
       }}
     >
       {header && (
     <div
       className="layout-header"
       style={{
-        maxWidth: 1320,
-        margin: '0 auto 16px',
+        maxWidth: isMobile ? '100%' : 'min(1320px, 100%)',
+        margin: isMobile ? '0 0 12px' : '0 auto 16px',
         display: 'grid',
-        gridTemplateColumns: sidebar ? 'auto 1fr auto' : 'auto 1fr',
+        gridTemplateColumns: isMobile ? '1fr' : sidebar ? 'auto 1fr auto' : 'auto 1fr',
         gridAutoFlow: 'column',
-        alignItems: 'start',
-        justifyItems: 'center',
-        gap: 12,
-        padding: '0 4px',
+        alignItems: isMobile ? 'start' : 'start',
+        justifyItems: isMobile ? 'start' : 'center',
+        gap: isMobile ? 8 : 12,
+        padding: isMobile ? '0' : '0 4px',
       }}
     >
         <div style={{ justifySelf: 'start', alignSelf: 'start' }}>{Brand}</div>
-        {sidebar ? (
-          <div style={{ justifySelf: 'center', display: 'flex', justifyContent: 'center', alignSelf: 'start' }}>
-            <button
-              className="mobile-menu-btn"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                padding: '10px 12px',
-                borderRadius: 12,
-                border: '1px solid var(--border)',
-                background: 'rgba(255,255,255,0.08)',
-                color: 'var(--text)',
-                cursor: 'pointer',
-              }}
-              onClick={() => setMobileNavOpen((v) => !v)}
-              aria-label="Toggle navigation"
-            >
-              <span style={{ fontWeight: 700 }}>Menu</span>
-              <span style={{ display: 'inline-block', width: 16, height: 2, background: 'var(--text)', position: 'relative' }}>
-                <span style={{ position: 'absolute', top: -5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
-                <span style={{ position: 'absolute', top: 5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
-              </span>
-            </button>
-          </div>
-        ) : (
-          <div />
-        )}
-        <div style={{ justifySelf: 'end', alignSelf: 'start', display: 'flex', alignItems: 'center' }}>{header}</div>
+        <div style={{ justifySelf: isMobile ? 'start' : 'end', alignSelf: 'start', display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: 10, flexWrap: 'wrap', width: '100%' }}>
+          {isMobile ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+                <button
+                  className="mobile-menu-btn"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    padding: '10px 12px',
+                    borderRadius: 12,
+                    border: '1px solid var(--border)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: 'var(--text)',
+                    cursor: 'pointer',
+                  }}
+                  onClick={() => {
+                    setMobileNavOpen((v) => !v);
+                    setShowMobileMenu(false);
+                  }}
+                  aria-label="Toggle navigation"
+                >
+                  <span style={{ fontWeight: 700 }}>Menu</span>
+                  <span style={{ display: 'inline-block', width: 16, height: 2, background: 'var(--text)', position: 'relative' }}>
+                    <span style={{ position: 'absolute', top: -5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
+                    <span style={{ position: 'absolute', top: 5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
+                  </span>
+                </button>
+                <AccountMenu
+                  isMobile
+                  show={showMobileMenu}
+                  toggle={() => setShowMobileMenu((v) => !v)}
+                />
+              </div>
+            </>
+          ) : (
+            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+              <AccountMenu isMobile={false} show={showMobileMenu} toggle={() => setShowMobileMenu((v) => !v)} />
+            </div>
+          )}
+        </div>
       </div>
     )}
       <div
         className="layout-grid"
         style={{
-          maxWidth: 1320,
-          margin: '0 auto',
+          maxWidth: isMobile ? '100%' : 'min(1320px, 100%)',
+          margin: isMobile ? '0' : '0 auto',
           display: 'grid',
-          gridTemplateColumns: sidebar ? '260px 1fr' : '1fr',
-          gap: 18,
+          gridTemplateColumns: isMobile ? '1fr' : sidebar ? '260px 1fr' : '1fr',
+          gap: isMobile ? 12 : 18,
+          width: '100%',
         }}
       >
-        {sidebar && (
+        {sidebar && (!isMobile || mobileNavOpen) && (
           <aside
             className={`surface sidebar ${mobileNavOpen ? 'open' : ''}`}
             style={{
-              padding: 18,
+              padding: isMobile ? 14 : 18,
               borderRadius: 18,
               display: 'grid',
               gap: 18,
-              position: 'static',
+              position: isMobile ? 'relative' : 'static',
               alignSelf: 'start',
               boxShadow: '0 18px 46px rgba(0,0,0,0.32)',
             }}
@@ -121,10 +147,78 @@ export function Layout({ children, header, sidebar }: Props) {
           </aside>
         )}
 
-        <main>
+        <main style={{ width: '100%' }}>
           {children}
         </main>
       </div>
+    </div>
+  );
+}
+
+function AccountMenu({ isMobile, show, toggle }: AccountMenuProps) {
+  return (
+    <div style={{ position: 'relative', marginLeft: isMobile ? 'auto' : 0 }}>
+      <button
+        onClick={toggle}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          padding: isMobile ? '8px 10px' : '10px 12px',
+          borderRadius: 12,
+          border: '1px solid var(--border)',
+          background: 'rgba(255,255,255,0.08)',
+          color: 'var(--text)',
+          cursor: 'pointer',
+        }}
+        aria-label="Account menu"
+      >
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="12" cy="12" r="11" fill="url(#gradUser)" />
+          <path d="M12 12.5c1.93 0 3.5-1.57 3.5-3.5S13.93 5.5 12 5.5 8.5 7.07 8.5 9s1.57 3.5 3.5 3.5Zm0 1.5c-2.33 0-7 1.17-7 3.5V19h14v-1.5c0-2.33-4.67-3.5-7-3.5Z" fill="#111" />
+          <defs>
+            <linearGradient id="gradUser" x1="6" y1="4" x2="18" y2="20" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#eef2f7" />
+              <stop offset="1" stopColor="#d6deea" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </button>
+      {show && (
+        <div
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: '110%',
+            background: 'rgba(15,22,36,0.95)',
+            border: '1px solid var(--border)',
+            borderRadius: 12,
+            padding: 8,
+            boxShadow: '0 16px 34px rgba(0,0,0,0.35)',
+            minWidth: 140,
+            zIndex: 20,
+          }}
+        >
+          <button
+            onClick={() => {
+              toggle();
+              const logoutBtn = document.querySelector('.logout-desktop') as HTMLButtonElement | null;
+              logoutBtn?.click();
+            }}
+            style={{
+              width: '100%',
+              padding: '10px',
+              borderRadius: 10,
+              border: '1px solid var(--border)',
+              background: 'rgba(255,255,255,0.08)',
+              color: 'var(--text)',
+              cursor: 'pointer',
+            }}
+          >
+            Logout
+          </button>
+        </div>
+      )}
     </div>
   );
 }
