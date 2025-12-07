@@ -8,7 +8,8 @@ RUN cd frontend && npm run build
 FROM composer:2 AS vendor
 WORKDIR /app
 COPY app/backend/composer.json app/backend/composer.lock ./backend/
-RUN cd backend && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+# Install dependencies without running scripts (artisan not present yet)
+RUN cd backend && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
 COPY app/backend/database ./backend/database
 
 FROM php:8.3-fpm-alpine
