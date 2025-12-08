@@ -20,6 +20,19 @@ class SetupController extends Controller
 {
     public function status()
     {
+        if (! $this->isSetupEnabled()) {
+            try {
+                $adminExists = User::where('role_id', '>=', 5)->exists();
+            } catch (\Throwable $e) {
+                $adminExists = true;
+            }
+
+            return response()->json([
+                'needsSetup' => false,
+                'adminExists' => $adminExists,
+            ]);
+        }
+
         try {
             $adminExists = User::where('role_id', '>=', 5)->exists();
             return response()->json([
@@ -38,6 +51,10 @@ class SetupController extends Controller
 
     public function create(Request $request)
     {
+        if (! $this->isSetupEnabled()) {
+            throw new AccessDeniedHttpException('Setup is disabled.');
+        }
+
         $adminExists = false;
         try {
             $adminExists = User::where('role_id', '>=', 5)->exists();
@@ -152,6 +169,7 @@ class SetupController extends Controller
             'MAIL_PASSWORD' => $data['mail_password'] ?? '',
             'MAIL_FROM_ADDRESS' => $data['mail_from_address'] ?? '',
             'MAIL_FROM_NAME' => $data['mail_from_name'] ?? $data['name'],
+            'SETUP_ENABLED' => 'false',
         ]);
 
         return response()->json(['created' => true, 'user' => $user]);
@@ -186,6 +204,10 @@ class SetupController extends Controller
 
     public function testDatabase(Request $request)
     {
+        if (! $this->isSetupEnabled()) {
+            throw new AccessDeniedHttpException('Setup is disabled.');
+        }
+
         $data = $request->validate([
             'db_host' => ['required', 'string'],
             'db_name' => ['required', 'string'],
@@ -271,6 +293,13 @@ class SetupController extends Controller
         );
 
         return response()->json(['url' => $url], 201);
+    }
+
+    private function isSetupEnabled(): bool
+    {
+        $value = strtolower((string) env('SETUP_ENABLED', 'true'));
+
+        return in_array($value, ['1', 'true', 'yes', 'on'], true);
     }
 
     private function writeEnv(array $pairs): void

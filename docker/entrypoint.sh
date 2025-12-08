@@ -40,6 +40,7 @@ update_env_value "DB_HOST" "$DB_HOST"
 update_env_value "DB_DATABASE" "$DB_DATABASE"
 update_env_value "DB_USERNAME" "$DB_USERNAME"
 update_env_value "DB_PASSWORD" "$DB_PASSWORD"
+update_env_value "SETUP_ENABLED" "$SETUP_ENABLED"
 update_env_value "REDIS_HOST" "$REDIS_HOST"
 update_env_value "REDIS_PORT" "$REDIS_PORT"
 update_env_value "CACHE_DRIVER" "$CACHE_DRIVER"
@@ -70,20 +71,24 @@ php artisan cache:clear >/dev/null 2>&1 || true
 php artisan route:clear >/dev/null 2>&1 || true
 
 # Run migrations/seed only once (unless you remove the provision mark).
-if [ ! -f "$PROVISION_MARK" ]; then
-  if [ -n "$DB_HOST" ] && [ -n "$DB_DATABASE" ]; then
-    if php -r "try { new PDO('mysql:host='.getenv('DB_HOST').';dbname='.getenv('DB_DATABASE'), getenv('DB_USERNAME'), getenv('DB_PASSWORD')); } catch (Throwable \$e) { exit(1);}"; then
-      php artisan migrate --force || true
-      php artisan db:seed --force || true
-      touch "$PROVISION_MARK"
+if [ "${AUTO_MIGRATE:-true}" = "true" ]; then
+  if [ ! -f "$PROVISION_MARK" ]; then
+    if [ -n "$DB_HOST" ] && [ -n "$DB_DATABASE" ]; then
+      if php -r "try { new PDO('mysql:host='.getenv('DB_HOST').';dbname='.getenv('DB_DATABASE'), getenv('DB_USERNAME'), getenv('DB_PASSWORD')); } catch (Throwable \$e) { exit(1);}"; then
+        php artisan migrate --force || true
+        php artisan db:seed --force || true
+        touch "$PROVISION_MARK"
+      else
+        echo "DB not reachable yet; skipping migrate/seed. Setup will run when DB is ready."
+      fi
     else
-      echo "DB not reachable yet; skipping migrate/seed. Setup will run when DB is ready."
+      echo "DB settings missing; skipping migrate/seed until setup completes."
     fi
   else
-    echo "DB settings missing; skipping migrate/seed until setup completes."
+    echo "Provisioning already completed; skipping migrate/seed."
   fi
 else
-  echo "Provisioning already completed; skipping migrate/seed."
+  echo "AUTO_MIGRATE disabled; skipping automatic migrate/seed."
 fi
 
 # Start services
