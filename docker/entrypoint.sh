@@ -91,6 +91,22 @@ else
   echo "AUTO_MIGRATE disabled; skipping automatic migrate/seed."
 fi
 
+# ----------------------------------------
+# Inject runtime API URL into frontend config.js
+# ----------------------------------------
+API_URL="${VITE_API_URL:-http://localhost/api}"
+
+if [ -f /var/www/html/public/config.js ]; then
+  echo "Injecting runtime API_URL=${API_URL} into config.js..."
+  sed -i "s|__API_URL__|${API_URL}|g" /var/www/html/public/config.js
+else
+  echo "Warning: public/config.js not found!"
+fi
+
+echo "Final runtime config.js contents:"
+cat /var/www/html/public/config.js || echo "config.js not readable"
+
 # Start services
 php-fpm -D
 exec nginx -g "daemon off;"
+

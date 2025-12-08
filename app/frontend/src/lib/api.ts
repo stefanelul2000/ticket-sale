@@ -1,11 +1,17 @@
 import axios from 'axios';
 
-const fallbackHost = `${window.location.protocol}//${window.location.hostname}:8080/api`;
-const client = axios.create({
-  // Use VITE_API_URL if set; otherwise resolve to current host so non-local clients (e.g., 10.0.10.14) work.
-  baseURL: import.meta.env.VITE_API_URL || fallbackHost,
+// Load API URL from runtime config injected by config.js
+const runtimeApiUrl = window.__APP_CONFIG__?.API_URL;
+
+// Fallback to the detected host if the config is missing
+const fallbackHost = `${window.location.origin}/api`;
+
+// Axios instance
+export const client = axios.create({
+  baseURL: runtimeApiUrl || fallbackHost,
   withCredentials: true,
 });
+
 
 export type AuthResponse = {
   token?: string;
