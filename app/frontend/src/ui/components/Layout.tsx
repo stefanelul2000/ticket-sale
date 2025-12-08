@@ -60,68 +60,64 @@ export function Layout({ children, header, sidebar, onLogout }: Props) {
           maxWidth: isMobile ? '100%' : 'min(1320px, 100%)',
           margin: isMobile ? '0 0 12px' : '0 auto 16px',
           display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : sidebar ? 'auto 1fr' : 'auto 1fr',
-          gridAutoFlow: 'column',
-          alignItems: 'start',
-          justifyItems: isMobile ? 'start' : 'center',
-          gap: isMobile ? 8 : 12,
+          gridTemplateColumns: '1fr auto', // Always 1fr auto to push right content to right
+          alignItems: 'center',
+          gap: 12,
           padding: isMobile ? '0' : '0 4px',
         }}
       >
-        <div style={{ justifySelf: 'start', alignSelf: 'start' }}>{Brand}</div>
-        <div
-          style={{
-            justifySelf: isMobile ? 'start' : 'end',
-            alignSelf: 'start',
-            display: 'flex',
-            alignItems: isMobile ? 'flex-start' : 'center',
-            gap: 10,
-            flexWrap: 'wrap',
-            width: '100%',
-          }}
-        >
-          {sidebar && isMobile && (
-            <button
-              className="mobile-menu-btn"
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 6,
-                padding: '10px 12px',
-                borderRadius: 12,
-                border: '1px solid var(--border)',
-                background: 'rgba(255,255,255,0.08)',
-                color: 'var(--text)',
-                cursor: 'pointer',
-              }}
-              onClick={() => {
-                setMobileNavOpen((v) => !v);
-                setShowMobileMenu(false);
-              }}
-              aria-label="Toggle navigation"
-            >
-              <span style={{ fontWeight: 700 }}>Menu</span>
-              <span style={{ display: 'inline-block', width: 16, height: 2, background: 'var(--text)', position: 'relative' }}>
-                <span style={{ position: 'absolute', top: -5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
-                <span style={{ position: 'absolute', top: 5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
-              </span>
-            </button>
-          )}
-          {header && (
-            <div style={{ flex: 1, minWidth: 180 }}>
-              {header}
-            </div>
-          )}
-          {onLogout && (
-            <AccountMenu
-              isMobile={isMobile}
-              show={showMobileMenu}
-              toggle={() => setShowMobileMenu((v) => !v)}
-              onLogout={onLogout}
-            />
-          )}
-        </div>
+        <div style={{ justifySelf: 'start' }}>{Brand}</div>
+                  <div
+                    style={{
+                      justifySelf: 'end',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                  >
+                    {sidebar && isMobile && (
+                      <button
+                        className="mobile-menu-btn"
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: 6,
+                          padding: '10px 12px',
+                          borderRadius: 12,
+                          border: '1px solid var(--border)',
+                          background: 'rgba(255,255,255,0.08)',
+                          color: 'var(--text)',
+                          cursor: 'pointer',
+                        }}
+                        onClick={() => {
+                          setMobileNavOpen((v) => !v);
+                          setShowMobileMenu(false);
+                        }}
+                        aria-label="Toggle navigation"
+                      >
+                        <span style={{ fontWeight: 700 }}>Menu</span>
+                        <span style={{ display: 'inline-block', width: 16, height: 2, background: 'var(--text)', position: 'relative' }}>
+                          <span style={{ position: 'absolute', top: -5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
+                          <span style={{ position: 'absolute', top: 5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
+                        </span>
+                      </button>
+                    )}
+                    {onLogout && ( // This is AccountMenu
+                      <AccountMenu
+                        isMobile={isMobile}
+                        show={showMobileMenu}
+                        toggle={() => setShowMobileMenu((v) => !v)}
+                        onLogout={onLogout}
+                      />
+                    )}
+                    {header && !isMobile && ( // Move header last, and only show on desktop
+                      <div style={{ marginRight: 10 }}>
+                        {header}
+                      </div>
+                    )}
+                  </div>
+        
       </div>
       <div
         className="layout-grid"
@@ -156,7 +152,7 @@ export function Layout({ children, header, sidebar, onLogout }: Props) {
           </aside>
         )}
 
-        <main style={{ width: '100%' }}>
+        <main style={{ width: '100%', minWidth: 0 }}>
           {children}
         </main>
       </div>

@@ -43,7 +43,8 @@ php artisan db:seed
 - Role-based access (viewer/check-in/seller/event manager/admin, site owner immutable).
 - Ticket generation with CSV/PNG sheet/ZIP of per-ticket barcodes.
 - Sell/verify/check-in with scan history and double-sell/check-in guards.
-- Events, ticket types, user/role admin; branding (logo/colors).
+- Events, ticket types, user/role admin; comprehensive UI branding (logo, primary/secondary/background colors).
+- UI includes toast notifications for user feedback and modal dialogs for critical interactions.
 - Redis-backed sessions/cache (in Docker).
 - Health endpoint: `GET /api/health`.
 

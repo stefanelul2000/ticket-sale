@@ -73,31 +73,176 @@ a {
   box-shadow: var(--shadow);
 }
 
-.mobile-menu-btn {
-  display: none !important;
+/* --- Responsive Layout Classes --- */
+
+.admin-users-invite {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr 140px auto;
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: center;
 }
 
+.admin-users-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  /* Handle extreme narrow widths on desktop gracefully */
+  overflow-x: auto; 
+}
+
+.admin-user-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 150px auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  /* Ensure text shrinks before overflowing */
+  min-width: 0;
+}
+
+.admin-user-row > div {
+  /* Truncate long text in grid cells */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Events View Classes */
+.event-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.event-summary-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.event-add-row-container {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.event-ticket-add-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 100px 100px;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* Ticket Type Card Redesign */
+.ticket-type-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.02);
+  display: flex;
+  flex-direction: column; /* Default stack on mobile */
+  gap: 8px;
+}
+
+.ticket-type-card-main-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.ticket-type-card-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ticket-type-card-event {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ticket-type-card-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.ticket-type-card-item {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.ticket-type-card-label {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ticket-type-card-kind {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(88,224,192,0.1);
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.ticket-type-card-price {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ticket-type-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.branding-colors-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.branding-container {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1.2fr 1fr;
+  align-items: start;
+}
+
+.sell-ticket-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.mobile-menu-btn {
+  /* Visibility controlled by React state (isMobile) */
+  display: inline-flex;
+}
+
+/* --- Mobile Breakpoint (< 900px) --- */
 @media (max-width: 900px) {
   .layout-grid {
     grid-template-columns: 1fr !important;
   }
 
   .layout-header {
-    display: grid !important;
-    grid-template-columns: auto 1fr !important;
-    grid-auto-flow: row;
-    align-items: center !important;
-    gap: 8px;
+    /* Layout.tsx handles grid-template-columns, no !important override needed */
+    /* display: grid !important; */
+    /* grid-template-columns: auto 1fr !important; */
   }
-  .mobile-menu-btn {
-    display: inline-flex !important;
-    justify-self: start;
-    margin-top: 4px;
-  }
-
+  
   .sidebar {
-    width: 100%;
-    position: static;
     display: none !important;
   }
 
@@ -117,30 +262,70 @@ a {
     grid-template-columns: 1fr !important;
   }
 
-  .event-add-row {
+  /* Admin Users Mobile */
+  .admin-users-invite {
     grid-template-columns: 1fr !important;
+    gap: 10px;
   }
-
-  .event-row-actions {
+  .admin-users-invite > div {
     justify-content: flex-start !important;
+  }
+  .admin-user-row {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .admin-user-row select {
+    width: 100% !important;
+  }
+  .admin-user-row > div:last-child {
+    justify-content: space-between !important;
     margin-top: 8px;
   }
+  .admin-user-row > div {
+    white-space: normal; /* Allow wrapping on mobile cards */
+    overflow: visible;
+  }
 
-  .event-generate-row {
+  /* Events Mobile */
+  .event-summary-row {
+    grid-template-columns: 1fr !important; /* Stack actions */
+  }
+  .event-summary-row > div:last-child {
+    justify-content: space-between !important;
+    margin-top: 8px;
+  }
+  
+  .event-add-row-container {
+    grid-template-columns: 1fr !important;
+  }
+  .event-ticket-add-container {
+    grid-template-columns: 1fr !important;
+  }
+  .event-generate-row > div:first-child {
     flex-direction: column;
     align-items: stretch;
   }
-
-  .layout-header > div:last-child {
-    margin-left: 0 !important;
-    width: 100%;
-    display: flex;
+  
+  /* Ticket Type Card Mobile */
+  .ticket-type-card-details {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ticket-type-card-actions {
     justify-content: flex-start;
-    gap: 8px;
-    flex-wrap: wrap;
   }
 
-  .mobile-menu-btn {
-    display: inline-flex !important;
+  /* Branding Mobile */
+  .branding-colors-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .branding-container {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Dashboard Mobile */
+  .sell-ticket-form {
+    grid-template-columns: 1fr !important;
   }
 }
