@@ -2,15 +2,10 @@ FROM node:20-alpine AS frontend
 WORKDIR /app
 COPY app/frontend/package*.json ./frontend/
 RUN cd frontend && npm ci
+# Ensure target public path exists for Vite outDir ../backend/public
+RUN mkdir -p /app/backend/public
 COPY app/frontend ./frontend
 RUN cd frontend && npm run build
-
-FROM composer:2 AS vendor
-WORKDIR /app
-COPY app/backend/composer.json app/backend/composer.lock ./backend/
-# Install dependencies without running scripts (artisan not present yet)
-RUN cd backend && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
-COPY app/backend/database ./backend/database
 
 FROM php:8.3-fpm-alpine
 RUN apk add --no-cache \
@@ -27,17 +22,19 @@ WORKDIR /var/www/html
 
 # Copy backend code
 COPY app/backend/ ./
-# Copy built frontend assets into public
-COPY --from=frontend /app/frontend/dist/ ./public/
-# Copy vendors
-COPY --from=vendor /app/backend/vendor ./vendor
+# Copy built frontend assets (Vite outDir is ../backend/public)
+COPY --from=frontend /app/backend/public ./public
+# Restore Laravel front controller (overwritten by Vite index.html copy)
+COPY app/backend/public/index.php ./public/index.php
+
+# Install composer binary then backend dependencies with autoload + discovery
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
 # Nginx config
 RUN mkdir -p /run/nginx
+COPY docker/nginx.conf.main /etc/nginx/nginx.conf
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
-
-# Install composer from the official image
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 # Entrypoint to run migrations and start php-fpm
 COPY docker/entrypoint.sh /entrypoint.sh

@@ -20,6 +20,7 @@ export const api = {
   me: () => client.get('/me').then((r) => r.data),
   setupStatus: () => client.get('/setup/status').then((r) => r.data),
   setup: (payload: any) => client.post('/setup', payload).then((r) => r.data),
+  setupTestDb: (payload: any) => client.post('/setup/test-db', payload).then((r) => r.data),
   uploadLogo: (formData: FormData) =>
     client.post('/setup/logo', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
   branding: () => client.get('/branding').then((r) => r.data),
@@ -55,16 +56,6 @@ export const api = {
   createTicketType: (payload: any) => client.post('/ticket-types', payload).then((r) => r.data),
   updateTicketType: (id: number, payload: any) => client.patch(`/ticket-types/${id}`, payload).then((r) => r.data),
   deleteTicketType: (id: number) => client.delete(`/ticket-types/${id}`).then((r) => r.data),
-  products: (event_id?: number) =>
-    client.get('/products', { params: event_id ? { event_id } : undefined }).then((r) => r.data),
-  createProduct: (payload: any) => client.post('/products', payload).then((r) => r.data),
-  updateProduct: (id: number, payload: any) => client.patch(`/products/${id}`, payload).then((r) => r.data),
-  deleteProduct: (id: number) => client.delete(`/products/${id}`).then((r) => r.data),
-  promos: (event_id?: number) =>
-    client.get('/promos', { params: event_id ? { event_id } : undefined }).then((r) => r.data),
-  createPromo: (payload: any) => client.post('/promos', payload).then((r) => r.data),
-  updatePromo: (id: number, payload: any) => client.patch(`/promos/${id}`, payload).then((r) => r.data),
-  deletePromo: (id: number) => client.delete(`/promos/${id}`).then((r) => r.data),
   impersonate: (role_id: number) => client.post('/impersonate', { role_id }).then((r) => r.data),
   stopImpersonate: () => client.delete('/impersonate').then((r) => r.data),
 };

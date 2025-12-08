@@ -15,6 +15,7 @@ Route::get('/setup/status', [SetupController::class, 'status']);
 Route::post('/setup', [SetupController::class, 'create']);
 Route::post('/setup/logo', [SetupController::class, 'uploadLogo']);
 Route::post('/setup/migrate', [SetupController::class, 'migrate']);
+Route::post('/setup/test-db', [SetupController::class, 'testDatabase']);
 
 Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
     Route::get('/me', function (Request $request) {
@@ -64,7 +65,7 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
         Route::post('/branding', [BrandingController::class, 'update']);
     });
 
-    // Event manager (role >=4) can manage events/products/ticket types/promos and ticket generation
+    // Event manager (role >=4) can manage events, ticket types, and ticket generation/export
     Route::middleware('role:4')->group(function () {
         Route::get('/events', [EventController::class, 'index']);
         Route::post('/events', [EventController::class, 'store']);

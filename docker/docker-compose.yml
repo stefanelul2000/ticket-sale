@@ -10,7 +10,11 @@ services:
       CACHE_DRIVER: redis
       SESSION_DRIVER: redis
       QUEUE_CONNECTION: sync
-      VITE_API_URL: https://ticket.domain.com/api
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Set to your public frontend/API URL
+      VITE_API_URL: http://10.0.10.14:8080/api
+      FRONTEND_URL: http://10.0.10.14:8080
     depends_on:
       - db
       - redis

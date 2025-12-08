@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: '../backend/public',
-    emptyOutDir: false, // don't wipe other public assets
+    // Avoid wiping user-uploaded public assets during local builds; container builds copy a clean public anyway.
+    emptyOutDir: false,
   },
 });

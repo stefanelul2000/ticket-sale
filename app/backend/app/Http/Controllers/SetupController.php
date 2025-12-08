@@ -4,11 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Models\Permission;
 use App\Models\Role;
+use App\Models\Setting;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -18,15 +20,20 @@ class SetupController extends Controller
 {
     public function status()
     {
-        $adminExists = User::where('role_id', '>=', 5)->exists();
-        if ($adminExists) {
-            abort(404);
+        try {
+            $adminExists = User::where('role_id', '>=', 5)->exists();
+            return response()->json([
+                'needsSetup' => ! $adminExists,
+                'adminExists' => $adminExists,
+            ]);
+        } catch (\Throwable $e) {
+            // If DB is not configured or unreachable, still surface setup.
+            return response()->json([
+                'needsSetup' => true,
+                'adminExists' => false,
+                'dbError' => 'Database not reachable yet; setup required.',
+            ]);
         }
-
-        return response()->json([
-            'needsSetup' => true,
-            'adminExists' => false,
-        ]);
     }
 
     public function create(Request $request)
@@ -74,6 +81,15 @@ class SetupController extends Controller
         DB::purge('mysql');
         DB::setDefaultConnection('setup');
 
+        try {
+            Artisan::call('migrate', ['--force' => true]);
+        } catch (\Throwable $e) {
+            return response()->json([
+                'message' => 'Database migrations failed during setup.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+
         $roles = [
             ['id' => 1, 'name' => 'Viewer (Reports)'],
             ['id' => 2, 'name' => 'Check-in'],
@@ -91,8 +107,7 @@ class SetupController extends Controller
             ['key' => 'manage.roles', 'name' => 'Manage roles', 'description' => 'Edit roles and permissions'],
             ['key' => 'manage.events', 'name' => 'Manage events', 'description' => 'Create/update event settings'],
             ['key' => 'manage.ticket_types', 'name' => 'Manage ticket types', 'description' => 'Create/update ticket types'],
-            ['key' => 'manage.products', 'name' => 'Manage products', 'description' => 'Create/update add-ons and products'],
-            ['key' => 'manage.promos', 'name' => 'Manage promo codes', 'description' => 'Create/update promo codes and access locks'],
+            ['key' => 'view.stats', 'name' => 'View stats', 'description' => 'Access ticket stats'],
             ['key' => 'view.reports', 'name' => 'View reports', 'description' => 'Access sales and analytics'],
         ];
         foreach ($permissions as $perm) {
@@ -117,11 +132,14 @@ class SetupController extends Controller
             $adminRole->permissions()->sync($allPerms);
         }
 
+        $appUrl = rtrim($request->getSchemeAndHttpHost(), '/');
         $this->writeEnv([
             'DB_HOST' => $data['db_host'],
             'DB_DATABASE' => $data['db_name'],
             'DB_USERNAME' => $data['db_user'],
             'DB_PASSWORD' => $data['db_password'],
+            'APP_URL' => $appUrl,
+            'FRONTEND_URL' => $appUrl,
             'MAIL_MAILER' => $data['mail_mailer'] ?? 'log',
             'MAIL_HOST' => $data['mail_host'] ?? '',
             'MAIL_PORT' => $data['mail_port'] ?? '',
@@ -157,12 +175,42 @@ class SetupController extends Controller
         }
     }
 
+    public function testDatabase(Request $request)
+    {
+        $data = $request->validate([
+            'db_host' => ['required', 'string'],
+            'db_name' => ['required', 'string'],
+            'db_user' => ['required', 'string'],
+            'db_password' => ['required', 'string'],
+        ]);
+
+        // Build a temporary connection config
+        $config = config('database.connections.mysql');
+        $config['host'] = $data['db_host'];
+        $config['database'] = $data['db_name'];
+        $config['username'] = $data['db_user'];
+        $config['password'] = $data['db_password'];
+
+        config(['database.connections.setup' => $config]);
+
+        try {
+            DB::connection('setup')->getPdo();
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'message' => 'Could not connect with provided database settings.',
+                'error' => $e->getMessage(),
+            ], 422);
+        }
+        return response()->json(['ok' => true]);
+    }
+
     public function uploadLogo(Request $request)
     {
-        $adminExists = User::where('role_id', 5)->exists();
+        $adminExists = User::where('role_id', '>=', 5)->exists();
         if ($adminExists) {
             $user = $request->user();
-            if (! $user || $user->role_id !== 5) {
+            if (! $user || $user->role_id < 5) {
                 throw new AccessDeniedHttpException('Only admin can upload logo after setup.');
             }
         }
@@ -172,15 +220,22 @@ class SetupController extends Controller
         ]);
 
         $file = $request->file('logo');
-        $dir = public_path('uploads/logos');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
         $name = uniqid('logo_', true) . '.' . $file->getClientOriginalExtension();
-        $file->move($dir, $name);
-        $url = url('uploads/logos/' . $name);
 
-        return response()->json(['url' => $url]);
+        // Store in persistent storage (public disk) so it survives deploys.
+        $path = $file->storeAs('logos', $name, ['disk' => 'public']);
+        $stored = Storage::disk('public')->url($path);
+        $url = Str::startsWith($stored, ['http://', 'https://'])
+            ? $stored
+            : rtrim(config('app.url') ?: $request->getSchemeAndHttpHost(), '/') . '/' . ltrim($stored, '/');
+
+        // Also persist to settings so everyone sees it.
+        Setting::updateOrCreate(
+            ['key' => 'branding'],
+            ['value' => ['logoUrl' => $url]]
+        );
+
+        return response()->json(['url' => $url], 201);
     }
 
     private function writeEnv(array $pairs): void
@@ -199,7 +254,7 @@ class SetupController extends Controller
         $env = file_exists($path) ? file_get_contents($path) : '';
         foreach ($pairs as $key => $value) {
             $pattern = "/^{$key}=.*$/m";
-            $line = $key . '=' . $value;
+            $line = $key . '=' . self::formatEnvValue((string) $value);
             if (preg_match($pattern, $env)) {
                 $env = preg_replace($pattern, $line, $env);
             } else {
@@ -211,5 +266,23 @@ class SetupController extends Controller
         // Best-effort lock-down after writing.
         @chmod($path, 0640);
         @chown($path, 'www-data');
+
+        // Copy to external env store if configured (for container persistence)
+        $store = env('ENV_STORE_PATH', '/config/app.env');
+        if ($store) {
+            if (! is_dir(dirname($store))) {
+                @mkdir(dirname($store), 0755, true);
+            }
+        @copy($path, $store);
     }
+
+    private static function formatEnvValue(string $value): string
+    {
+        $escaped = str_replace(['\\', '"'], ['\\\\', '\\"'], $value);
+        if ($escaped === '') {
+            return '""';
+        }
+        return "\"{$escaped}\"";
+    }
+}
 }

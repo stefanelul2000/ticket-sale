@@ -1,4 +1,8 @@
 .env
+*.env
+docker/local*
+docs
+docs/*
 app/backend/.env
 app/backend/storage/logs/*
 app/backend/storage/framework/cache/*
@@ -6,9 +10,14 @@ app/backend/storage/framework/sessions/*
 app/backend/storage/framework/views/*
 app/backend/vendor/
 app/backend/node_modules/
+app/backend/bootstrap/cache/*
 app/frontend/node_modules/
 app/backend/public/assets/
+app/backend/public/uploads/
+app/backend/public/uploads/*
 backups/
+AGENTS.md
+*-compose.local.yml
 *.log
 *.sqlite
 *.DS_Store

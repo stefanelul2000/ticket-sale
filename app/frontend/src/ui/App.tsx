@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import JsBarcode from 'jsbarcode';
 import JSZip from 'jszip';
 import { useAuth } from '../state/useAuth';
-import { useTheme } from '../state/useTheme';
+import { useTheme, themeDefaults } from '../state/useTheme';
 import { Layout } from './components/Layout';
 import { Card } from './components/Card';
 import { Button } from './components/Button';
@@ -60,9 +60,13 @@ export function App() {
   const [sellTicket, setSellTicket] = useState({ ticket: '', name: '' });
   const [verifyNumber, setVerifyNumber] = useState('');
   const [verifyResult, setVerifyResult] = useState<Ticket | null>(null);
-  const [view, setView] = useState<'login' | 'register' | 'setup' | 'app' | 'admin' | 'events'>('login');
-  const [needsSetup, setNeedsSetup] = useState(false);
-  const [checkedSetup, setCheckedSetup] = useState<boolean>(() => Boolean(sessionStorage.getItem('setupChecked')));
+  const [hasStartedSetup, setHasStartedSetup] = useState(() => {
+    if (typeof sessionStorage === 'undefined') return false;
+    return sessionStorage.getItem('ts_setup_started') === '1';
+  });
+  const [view, setView] = useState<'welcome' | 'login' | 'register' | 'setup' | 'app' | 'admin' | 'events'>('welcome');
+  const [needsSetup, setNeedsSetup] = useState(true);
+  const [checkedSetup, setCheckedSetup] = useState<boolean>(false);
   const [setupForm, setSetupForm] = useState({
     db_host: '',
     db_name: '',
@@ -85,6 +89,8 @@ export function App() {
   const [logoFileName, setLogoFileName] = useState('');
   const [setupStep, setSetupStep] = useState(0);
   const [setupSuccess, setSetupSuccess] = useState(false);
+  const [setupLoading, setSetupLoading] = useState(false);
+  const [dbStepLocked, setDbStepLocked] = useState(false);
   const [rolesPerms, setRolesPerms] = useState<RoleWithPerms[]>([]);
   const [permissions, setPermissions] = useState<Permission[]>([]);
   const [events, setEvents] = useState<EventType[]>([]);
@@ -162,28 +168,37 @@ export function App() {
 
   // Fetch shared branding so all users see the same theme
   useEffect(() => {
+    if (!checkedSetup || needsSetup) return;
+    let cancelled = false;
     api.branding()
       .then((b) => {
+        if (cancelled) return;
         if (b?.primary || b?.secondary || b?.background || b?.logoUrl !== undefined) {
+          const nextPrimary = b.primary ?? primary;
+          const nextSecondary = b.secondary ?? secondary;
+          const nextBackground = b.background ?? background;
           setTheme({
-            primary: b.primary ?? primary,
-            secondary: b.secondary ?? secondary,
-            background: b.background ?? background,
+            primary: nextPrimary,
+            secondary: nextSecondary,
+            background: nextBackground,
             logoUrl: b.logoUrl ?? logoUrl,
           });
           setBrandDraft({
-            primary: b.primary ?? primary,
-            secondary: b.secondary ?? secondary,
-            background: b.background ?? background,
+            primary: nextPrimary,
+            secondary: nextSecondary,
+            background: nextBackground,
           });
-          applyThemeVars(b.primary ?? primary, b.secondary ?? secondary, b.background ?? background);
+          applyThemeVars(nextPrimary, nextSecondary, nextBackground);
         }
       })
       .catch(() => {
         // ignore fetch errors; fallback to stored theme
       });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [checkedSetup, needsSetup]);
 
   const uploadLogo = async (file: File) => {
     setSetupError(null);
@@ -413,21 +428,36 @@ export function App() {
   }, [primary, secondary, background]);
 
   useEffect(() => {
+    if (checkedSetup && needsSetup) {
+      setTheme({
+        primary: themeDefaults.primary,
+        secondary: themeDefaults.secondary,
+        background: themeDefaults.background,
+        logoUrl: themeDefaults.logoUrl,
+      });
+      setBrandDraft({
+        primary: themeDefaults.primary,
+        secondary: themeDefaults.secondary,
+        background: themeDefaults.background,
+      });
+      setLogoFileName('');
+    }
+  }, [checkedSetup, needsSetup, setTheme]);
+
+  useEffect(() => {
     if (checkedSetup) return;
     api
       .setupStatus()
       .then((res) => {
         setNeedsSetup(res.needsSetup);
-        if (res.needsSetup) setView('setup');
+        setView(res.needsSetup ? (hasStartedSetup ? 'setup' : 'welcome') : 'login');
         setCheckedSetup(true);
-        sessionStorage.setItem('setupChecked', '1');
       })
       .catch(() => {
-        // Setup hard-deny (404) or other error -> assume setup done
-        setNeedsSetup(false);
+        // Any error: force setup to display so the user can configure DB/env.
+        setNeedsSetup(true);
+        setView(hasStartedSetup ? 'setup' : 'welcome');
         setCheckedSetup(true);
-        sessionStorage.setItem('setupChecked', '1');
-        if (!user) setView('login');
       });
   }, [checkedSetup, user]);
 
@@ -445,6 +475,12 @@ export function App() {
       setUsers([]);
     }
   }, [user]);
+
+  useEffect(() => {
+    if (needsSetup) {
+      setView(hasStartedSetup ? 'setup' : 'welcome');
+    }
+  }, [needsSetup, hasStartedSetup]);
 
   useEffect(() => {
     if ((view === 'admin' && isAdmin) || (view === 'events' && canManageEvents)) {
@@ -572,9 +608,9 @@ export function App() {
     });
   };
 
-  const publicNav = needsSetup ? (
+  const publicNav = needsSetup && view !== 'setup' ? (
     <div style={{ display: 'flex', gap: 10 }}>
-      <Button variant={view === 'setup' ? 'solid' : 'ghost'} onClick={() => setView('setup')}>
+      <Button variant="solid" onClick={() => setView('setup')}>
         Setup
       </Button>
     </div>
@@ -638,22 +674,17 @@ export function App() {
           </Button>
         </>
       )}
-      {/* Hidden logout button for dropdown trigger */}
-      <Button
-        className="logout-desktop"
-        variant="ghost"
-        onClick={logout}
-        style={{ display: 'none' }}
-      >
-        Logout
-      </Button>
     </div>
   ) : null;
 
   if (!user && view === 'login') {
+    if (needsSetup) {
+      setView('setup');
+      return null;
+    }
     return (
       <>
-      <Layout header={publicNav}>
+      <Layout header={publicNav} onLogout={user ? logout : undefined}>
         <div style={{ display: 'grid', gap: 16, maxWidth: 420, margin: '80px auto 0', textAlign: 'center' }}>
           {(setupSuccess || registerNotice) && (
             <Card>
@@ -745,7 +776,7 @@ export function App() {
   if (!user && view === 'register') {
     return (
       <>
-      <Layout header={publicNav}>
+      <Layout header={publicNav} onLogout={user ? logout : undefined}>
         <div style={{ display: 'grid', gap: 16, maxWidth: 460, margin: '0 auto' }}>
           <Card title="Register">
             <form
@@ -843,6 +874,44 @@ export function App() {
       {ToastPortal}
       {ModalPortal}
       </>
+    );
+  }
+
+  if (view === 'welcome' && needsSetup && !hasStartedSetup) {
+    return (
+      <Layout>
+        <div
+          style={{
+            minHeight: '70vh',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 16,
+            textAlign: 'center',
+            padding: 24,
+          }}
+        >
+          <Card title="Welcome to Ticket Sale" titleAlign="center">
+            <div style={{ display: 'grid', gap: 16 }}>
+              <p style={{ margin: 0, color: 'var(--muted)' }}>
+                A guided wizard will help you connect the database, create the first admin, configure email, and set basic branding.
+              </p>
+              <Button
+                onClick={() => {
+                  setHasStartedSetup(true);
+                  if (typeof sessionStorage !== 'undefined') {
+                    sessionStorage.setItem('ts_setup_started', '1');
+                  }
+                  setView('setup');
+                }}
+              >
+                Start setup
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </Layout>
     );
   }
 
@@ -1008,12 +1077,9 @@ export function App() {
               <input
                 placeholder="https://..."
                 value={logoUrl}
-                      onChange={(e) => {
-                        setTheme({ logoUrl: e.target.value });
-                        api.saveBranding({ primary: brandDraft.primary, secondary: brandDraft.secondary, background: brandDraft.background, logoUrl: e.target.value });
-                      }}
-                    style={inputStyle}
-                  />
+                onChange={(e) => setTheme({ logoUrl: e.target.value })}
+                style={inputStyle}
+              />
               <label style={{ color: 'var(--muted)' }}>Or upload a logo</label>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <label
@@ -1051,21 +1117,37 @@ export function App() {
 
     return (
       <>
-      <Layout header={user ? topbar : publicNav}>
+      <Layout header={user ? topbar : publicNav} onLogout={user ? logout : undefined}>
         <div style={{ maxWidth: 620, margin: '0 auto', display: 'grid', gap: 16 }}>
           <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
             {steps.map((step, idx) => (
               <div
                 key={step.title}
-                onClick={() => setSetupStep(idx)}
+                onClick={() => {
+                  if (
+                    idx <= setupStep &&
+                    idx !== setupStep &&
+                    (!dbStepLocked || idx > 0)
+                  ) {
+                    setSetupStep(idx);
+                  }
+                }}
                 style={{
-                  cursor: 'pointer',
+                  cursor:
+                    idx <= setupStep && (!dbStepLocked || idx > 0) ? 'pointer' : 'not-allowed',
                   padding: '8px 12px',
                   borderRadius: 12,
                   border: '1px solid var(--border)',
                   background: idx === setupStep ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
-                  color: 'var(--text)',
+                  color:
+                    idx <= setupStep && (!dbStepLocked || idx > 0)
+                      ? 'var(--text)'
+                      : 'rgba(255,255,255,0.3)',
                   fontWeight: 600,
+                  opacity:
+                    idx <= setupStep && (!dbStepLocked || idx > 0)
+                      ? 1
+                      : 0.5,
                 }}
               >
                 {idx + 1}. {step.title}
@@ -1078,13 +1160,61 @@ export function App() {
           {setupError && <div style={{ color: '#ff8c8c' }}>{setupError}</div>}
 
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <Button variant="ghost" disabled={setupStep === 0} onClick={() => setSetupStep((s) => Math.max(0, s - 1))}>
-              Back
-            </Button>
-            {setupStep < steps.length - 1 ? (
-              <Button onClick={() => setSetupStep((s) => Math.min(steps.length - 1, s + 1))}>Next</Button>
+            {setupStep > 0 ? (
+              <Button
+                variant="ghost"
+                disabled={setupLoading || (dbStepLocked && setupStep === 1)}
+                onClick={() =>
+                  setSetupStep((s) => {
+                    const next = s - 1;
+                    return dbStepLocked && next < 1 ? 1 : Math.max(0, next);
+                  })
+                }
+              >
+                Back
+              </Button>
             ) : (
-              <Button onClick={handleSetup}>Complete Setup</Button>
+              <span />
+            )}
+            {setupStep < steps.length - 1 ? (
+              <Button
+                disabled={setupLoading}
+                onClick={async () => {
+                  if (setupStep === 0) {
+                    setSetupError(null);
+                    setSetupLoading(true);
+                    try {
+                      const res = await api.setupTestDb({
+                        db_host: setupForm.db_host,
+                        db_name: setupForm.db_name,
+                        db_user: setupForm.db_user,
+                        db_password: setupForm.db_password,
+                      });
+                      if (res?.ok) {
+                        showToast('Database connected and migrations ran.');
+                        setDbStepLocked(true);
+                        setSetupStep((s) => Math.min(steps.length - 1, s + 1));
+                      } else {
+                        showToast(res?.message || 'DB test failed.');
+                      }
+                    } catch (err: any) {
+                      const msg = err?.response?.data?.message || 'DB test failed.';
+                      setSetupError(msg);
+                      showToast(msg);
+                    } finally {
+                      setSetupLoading(false);
+                    }
+                    return;
+                  }
+                  setSetupStep((s) => Math.min(steps.length - 1, s + 1));
+                }}
+              >
+                {setupLoading ? 'Testing...' : 'Next'}
+              </Button>
+            ) : (
+              <Button onClick={handleSetup} disabled={setupLoading}>
+                {setupLoading ? 'Completing...' : 'Complete Setup'}
+              </Button>
             )}
           </div>
         </div>
@@ -1734,7 +1864,7 @@ export function App() {
 
     return (
       <>
-      <Layout header={topbar} sidebar={sidebarNav}>
+      <Layout header={topbar} sidebar={sidebarNav} onLogout={logout}>
         <div style={{ display: 'grid', gap: 18 }}>
           <div style={{ display: 'grid', gap: 10 }}>
             <div style={{ color: 'var(--muted)', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.6 }}>Event management</div>
@@ -2199,7 +2329,7 @@ export function App() {
 
     return (
       <>
-      <Layout header={topbar} sidebar={sidebarNav}>
+      <Layout header={topbar} sidebar={sidebarNav} onLogout={logout}>
         <div style={{ display: 'grid', gap: 18 }}>
           <div style={{ display: 'grid', gap: 10 }}>
             <div style={{ color: 'var(--muted)', fontSize: 13, textTransform: 'uppercase', letterSpacing: 0.6 }}>Admin</div>
@@ -2238,7 +2368,7 @@ export function App() {
 
   return (
     <>
-    <Layout header={topbar} sidebar={sidebarNav}>
+    <Layout header={topbar} sidebar={sidebarNav} onLogout={logout}>
       <div className="two-col" style={{ display: 'grid', gap: 16, gridTemplateColumns: '2fr 1fr', alignItems: 'start' }}>
         <div style={{ display: 'grid', gap: 16 }}>
           {canSell && (

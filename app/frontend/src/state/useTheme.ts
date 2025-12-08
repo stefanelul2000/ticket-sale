@@ -1,22 +1,24 @@
 import { create } from 'zustand';
 
-type ThemeState = {
+type ThemeValues = {
   primary: string;
   secondary: string;
   background: string;
   logoUrl: string;
-  setTheme: (t: Partial<Omit<ThemeState, 'setTheme'>>) => void;
 };
 
-const defaults: ThemeState = {
+type ThemeState = ThemeValues & {
+  setTheme: (t: Partial<ThemeValues>) => void;
+};
+
+export const themeDefaults: ThemeValues = {
   primary: '#ff5c8d',
   secondary: '#43d9ad',
   background: '#0b0c10',
   logoUrl: '',
-  setTheme: () => undefined,
 };
 
-const loadPersisted = (): Partial<ThemeState> => {
+const loadPersisted = (): Partial<ThemeValues> => {
   if (typeof localStorage === 'undefined') return {};
   try {
     const raw = localStorage.getItem('ts_theme');
@@ -27,26 +29,24 @@ const loadPersisted = (): Partial<ThemeState> => {
 };
 
 export const useTheme = create<ThemeState>((set) => ({
-  ...defaults,
+  ...themeDefaults,
   ...loadPersisted(),
   setTheme: (t) =>
     set((state) => {
-      const next = { ...state, ...t };
+      const nextValues: ThemeValues = {
+        primary: state.primary,
+        secondary: state.secondary,
+        background: state.background,
+        logoUrl: state.logoUrl,
+        ...t,
+      };
       if (typeof localStorage !== 'undefined') {
         try {
-          localStorage.setItem(
-            'ts_theme',
-            JSON.stringify({
-              primary: next.primary,
-              secondary: next.secondary,
-              background: next.background,
-              logoUrl: next.logoUrl,
-            }),
-          );
+          localStorage.setItem('ts_theme', JSON.stringify(nextValues));
         } catch {
           // ignore
         }
       }
-      return next;
+      return { ...state, ...t };
     }),
 }));

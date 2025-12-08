@@ -6,11 +6,12 @@ type Props = {
   children: ReactNode;
   header?: ReactNode;
   sidebar?: ReactNode;
+  onLogout?: () => Promise<void> | void;
 };
 
-type AccountMenuProps = { isMobile: boolean; show: boolean; toggle: () => void };
+type AccountMenuProps = { isMobile: boolean; show: boolean; toggle: () => void; onLogout?: () => Promise<void> | void };
 
-export function Layout({ children, header, sidebar }: Props) {
+export function Layout({ children, header, sidebar, onLogout }: Props) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const { logoUrl } = useTheme();
@@ -53,67 +54,75 @@ export function Layout({ children, header, sidebar }: Props) {
         padding: isMobile ? 12 : 24,
       }}
     >
-      {header && (
-    <div
-      className="layout-header"
-      style={{
-        maxWidth: isMobile ? '100%' : 'min(1320px, 100%)',
-        margin: isMobile ? '0 0 12px' : '0 auto 16px',
-        display: 'grid',
-        gridTemplateColumns: isMobile ? '1fr' : sidebar ? 'auto 1fr auto' : 'auto 1fr',
-        gridAutoFlow: 'column',
-        alignItems: isMobile ? 'start' : 'start',
-        justifyItems: isMobile ? 'start' : 'center',
-        gap: isMobile ? 8 : 12,
-        padding: isMobile ? '0' : '0 4px',
-      }}
-    >
+      <div
+        className="layout-header"
+        style={{
+          maxWidth: isMobile ? '100%' : 'min(1320px, 100%)',
+          margin: isMobile ? '0 0 12px' : '0 auto 16px',
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : sidebar ? 'auto 1fr' : 'auto 1fr',
+          gridAutoFlow: 'column',
+          alignItems: 'start',
+          justifyItems: isMobile ? 'start' : 'center',
+          gap: isMobile ? 8 : 12,
+          padding: isMobile ? '0' : '0 4px',
+        }}
+      >
         <div style={{ justifySelf: 'start', alignSelf: 'start' }}>{Brand}</div>
-        <div style={{ justifySelf: isMobile ? 'start' : 'end', alignSelf: 'start', display: 'flex', alignItems: isMobile ? 'flex-start' : 'center', gap: 10, flexWrap: 'wrap', width: '100%' }}>
-          {isMobile ? (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
-                <button
-                  className="mobile-menu-btn"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6,
-                    padding: '10px 12px',
-                    borderRadius: 12,
-                    border: '1px solid var(--border)',
-                    background: 'rgba(255,255,255,0.08)',
-                    color: 'var(--text)',
-                    cursor: 'pointer',
-                  }}
-                  onClick={() => {
-                    setMobileNavOpen((v) => !v);
-                    setShowMobileMenu(false);
-                  }}
-                  aria-label="Toggle navigation"
-                >
-                  <span style={{ fontWeight: 700 }}>Menu</span>
-                  <span style={{ display: 'inline-block', width: 16, height: 2, background: 'var(--text)', position: 'relative' }}>
-                    <span style={{ position: 'absolute', top: -5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
-                    <span style={{ position: 'absolute', top: 5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
-                  </span>
-                </button>
-                <AccountMenu
-                  isMobile
-                  show={showMobileMenu}
-                  toggle={() => setShowMobileMenu((v) => !v)}
-                />
-              </div>
-            </>
-          ) : (
-            <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <AccountMenu isMobile={false} show={showMobileMenu} toggle={() => setShowMobileMenu((v) => !v)} />
+        <div
+          style={{
+            justifySelf: isMobile ? 'start' : 'end',
+            alignSelf: 'start',
+            display: 'flex',
+            alignItems: isMobile ? 'flex-start' : 'center',
+            gap: 10,
+            flexWrap: 'wrap',
+            width: '100%',
+          }}
+        >
+          {sidebar && isMobile && (
+            <button
+              className="mobile-menu-btn"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                padding: '10px 12px',
+                borderRadius: 12,
+                border: '1px solid var(--border)',
+                background: 'rgba(255,255,255,0.08)',
+                color: 'var(--text)',
+                cursor: 'pointer',
+              }}
+              onClick={() => {
+                setMobileNavOpen((v) => !v);
+                setShowMobileMenu(false);
+              }}
+              aria-label="Toggle navigation"
+            >
+              <span style={{ fontWeight: 700 }}>Menu</span>
+              <span style={{ display: 'inline-block', width: 16, height: 2, background: 'var(--text)', position: 'relative' }}>
+                <span style={{ position: 'absolute', top: -5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
+                <span style={{ position: 'absolute', top: 5, left: 0, right: 0, height: 2, background: 'var(--text)' }} />
+              </span>
+            </button>
+          )}
+          {header && (
+            <div style={{ flex: 1, minWidth: 180 }}>
+              {header}
             </div>
+          )}
+          {onLogout && (
+            <AccountMenu
+              isMobile={isMobile}
+              show={showMobileMenu}
+              toggle={() => setShowMobileMenu((v) => !v)}
+              onLogout={onLogout}
+            />
           )}
         </div>
       </div>
-    )}
       <div
         className="layout-grid"
         style={{
@@ -155,7 +164,14 @@ export function Layout({ children, header, sidebar }: Props) {
   );
 }
 
-function AccountMenu({ isMobile, show, toggle }: AccountMenuProps) {
+function AccountMenu({ isMobile, show, toggle, onLogout }: AccountMenuProps) {
+  const handleLogout = async () => {
+    toggle();
+    if (onLogout) {
+      await onLogout();
+    }
+  };
+
   return (
     <div style={{ position: 'relative', marginLeft: isMobile ? 'auto' : 0 }}>
       <button
@@ -200,11 +216,7 @@ function AccountMenu({ isMobile, show, toggle }: AccountMenuProps) {
           }}
         >
           <button
-            onClick={() => {
-              toggle();
-              const logoutBtn = document.querySelector('.logout-desktop') as HTMLButtonElement | null;
-              logoutBtn?.click();
-            }}
+            onClick={handleLogout}
             style={{
               width: '100%',
               padding: '10px',
