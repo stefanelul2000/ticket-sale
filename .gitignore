@@ -17,6 +17,8 @@ app/backend/public/uploads/
 app/backend/public/uploads/*
 backups/
 AGENTS.md
+.gemini/
+.gemini/*
 *-compose.local.yml
 *.log
 *.sqlite

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import JsBarcode from 'jsbarcode';
 import JSZip from 'jszip';
@@ -60,6 +60,12 @@ export function App() {
   const [sellTicket, setSellTicket] = useState({ ticket: '', name: '' });
   const [verifyNumber, setVerifyNumber] = useState('');
   const [verifyResult, setVerifyResult] = useState<Ticket | null>(null);
+  
+  // Auto Check-in Mode State
+  const [autoCheckin, setAutoCheckin] = useState(false);
+  const [scanStatus, setScanStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const inputRef = React.useRef<HTMLInputElement>(null);
+
   const [hasStartedSetup, setHasStartedSetup] = useState(() => {
     if (typeof sessionStorage === 'undefined') return false;
     return sessionStorage.getItem('ts_setup_started') === '1';
@@ -563,6 +569,12 @@ export function App() {
     if (!target || !user) return;
     if (!target.includes('_')) {
       showToast('Please scan/enter the full ticket code (e.g., 4_001).');
+      if (autoCheckin) {
+        setScanStatus('error');
+        setVerifyNumber('');
+        setTimeout(() => setScanStatus('idle'), 1000);
+        inputRef.current?.focus();
+      }
       return;
     }
     const actionTime = new Date().toLocaleTimeString();
@@ -574,10 +586,24 @@ export function App() {
       await loadStats();
       setHistory((prev) => [{ time: actionTime, code: target, action: 'checkin' as const, status: 'Checked in', success: true, name: verifyResult?.name }, ...prev].slice(0, 20));
       showToast('Checked in.');
+      
+      if (autoCheckin) {
+        setScanStatus('success');
+        setVerifyNumber('');
+        setTimeout(() => setScanStatus('idle'), 1000);
+        inputRef.current?.focus();
+      }
     } catch (err: any) {
       const msg = err?.response?.data?.message || 'Failed to check in.';
       setHistory((prev) => [{ time: actionTime, code: target, action: 'checkin' as const, status: msg, success: false, name: verifyResult?.name }, ...prev].slice(0, 20));
       showToast(msg);
+      
+      if (autoCheckin) {
+        setScanStatus('error');
+        setVerifyNumber('');
+        setTimeout(() => setScanStatus('idle'), 1000);
+        inputRef.current?.focus();
+      }
     }
   };
 
@@ -2392,15 +2418,138 @@ export function App() {
           )}
 
           {canCheckin && (
-            <Card title="Verify / Check-in">
+            <Card
+              title="Verify / Check-in"
+              action={
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <div
+                    onClick={() => {
+                      const next = !autoCheckin;
+                      setAutoCheckin(next);
+                      if (next) setTimeout(() => inputRef.current?.focus(), 50);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      minWidth: 140,
+                      fontSize: 13,
+                      fontFamily: 'inherit',
+                      fontWeight: 700,
+                      lineHeight: 1.1,
+                      letterSpacing: 0.1,
+                      cursor: 'pointer',
+                      padding: '6px 12px',
+                      borderRadius: 6,
+                      border: autoCheckin ? '1px solid var(--accent)' : '1px solid var(--border)',
+                      background: autoCheckin ? 'rgba(67,217,173,0.1)' : 'transparent',
+                      color: autoCheckin ? 'var(--accent)' : 'var(--muted)',
+                      transition: '0.2s',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: 3,
+                        border: autoCheckin ? 'none' : '2px solid var(--muted)',
+                        background: autoCheckin ? 'var(--accent)' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {autoCheckin && (
+                        <svg width="8" height="6" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4L3.5 6.5L9 1" stroke="#0b101a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    Auto Check-in
+                  </div>
+                  <div
+                    onClick={() => setShowHistory(!showHistory)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      minWidth: 100,
+                      fontSize: 13,
+                      fontFamily: 'inherit',
+                      fontWeight: 700,
+                      lineHeight: 1.1,
+                      letterSpacing: 0.1,
+                      cursor: 'pointer',
+                      padding: '6px 12px',
+                      borderRadius: 6,
+                      border: showHistory ? '1px solid var(--text)' : '1px solid var(--border)',
+                      background: showHistory ? 'rgba(255,255,255,0.06)' : 'transparent',
+                      color: showHistory ? 'var(--text)' : 'var(--muted)',
+                      transition: '0.2s',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 12,
+                        height: 12,
+                        borderRadius: 3,
+                        border: showHistory ? 'none' : '2px solid var(--muted)',
+                        background: showHistory ? 'var(--text)' : 'transparent',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      {showHistory && (
+                        <svg width="8" height="6" viewBox="0 0 10 8" fill="none">
+                          <path d="M1 4L3.5 6.5L9 1" stroke="#0b101a" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      )}
+                    </div>
+                    History
+                  </div>
+                </div>
+              }
+            >
               <div style={{ display: 'grid', gap: 10 }}>
+                {autoCheckin && <div style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600 }}>Rapid Scan Active: Scans will check-in immediately.</div>}
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                   <input
-                    placeholder="Scan or enter ticket # / barcode"
+                    ref={inputRef}
+                    placeholder={autoCheckin ? "Scan to check-in..." : "Scan or enter ticket # / barcode"}
                     value={verifyNumber}
                     inputMode="numeric"
                     onChange={(e) => setVerifyNumber(e.target.value)}
-                    style={{ ...inputStyle, minWidth: 220, flex: '1 1 200px' }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && autoCheckin) {
+                        handleCheckin(verifyNumber);
+                      }
+                    }}
+                    onBlur={() => {
+                      if (autoCheckin) {
+                        setTimeout(() => inputRef.current?.focus(), 200);
+                      }
+                    }}
+                    style={{
+                      ...inputStyle,
+                      minWidth: 220,
+                      flex: '1 1 200px',
+                      borderColor:
+                        scanStatus === 'success'
+                          ? '#43d9ad'
+                          : scanStatus === 'error'
+                          ? '#ff8c8c'
+                          : 'var(--border)',
+                      boxShadow:
+                        scanStatus === 'success'
+                          ? '0 0 0 2px rgba(67, 217, 173, 0.2)'
+                          : scanStatus === 'error'
+                          ? '0 0 0 2px rgba(255, 140, 140, 0.2)'
+                          : 'none',
+                      transition: 'border-color 0.2s, box-shadow 0.2s',
+                    }}
                   />
                   <Button variant="ghost" onClick={handleVerify}>
                     Verify
@@ -2408,15 +2557,6 @@ export function App() {
                   <Button onClick={() => handleCheckin()} disabled={!verifyNumber}>
                     Check-in
                   </Button>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--muted)', fontSize: 13 }}>
-                    <input
-                      type="checkbox"
-                      checked={showHistory}
-                      onChange={(e) => setShowHistory(e.target.checked)}
-                      style={{ width: 16, height: 16 }}
-                    />
-                    Show scan history
-                  </label>
                 </div>
                 {verifyResult && (
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center', color: 'var(--muted)' }}>
