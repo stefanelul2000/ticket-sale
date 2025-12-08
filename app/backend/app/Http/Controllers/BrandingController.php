@@ -16,7 +16,11 @@ class BrandingController extends Controller
             'logoUrl' => '',
         ];
 
-        $branding = Setting::where('key', 'branding')->first();
+        try {
+            $branding = Setting::where('key', 'branding')->first();
+        } catch (\Throwable $e) {
+            $branding = null;
+        }
         return response()->json($branding?->value ?: $defaults);
     }
 

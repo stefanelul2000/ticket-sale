@@ -38,7 +38,12 @@ class SetupController extends Controller
 
     public function create(Request $request)
     {
-        $adminExists = User::where('role_id', '>=', 5)->exists();
+        $adminExists = false;
+        try {
+            $adminExists = User::where('role_id', '>=', 5)->exists();
+        } catch (\Throwable $e) {
+            $adminExists = false;
+        }
         if ($adminExists) {
             throw new AccessDeniedHttpException('Setup already completed.');
         }
@@ -154,8 +159,12 @@ class SetupController extends Controller
 
     public function migrate(Request $request)
     {
-        // Allow only when an admin exists (setup completed) OR when explicitly requested right after setup.
-        $adminExists = User::where('role_id', '>=', 5)->exists();
+        $adminExists = false;
+        try {
+            $adminExists = User::where('role_id', '>=', 5)->exists();
+        } catch (\Throwable $e) {
+            $adminExists = false;
+        }
         if (! $adminExists) {
             throw new AccessDeniedHttpException('Setup not completed.');
         }
@@ -202,12 +211,35 @@ class SetupController extends Controller
                 'error' => $e->getMessage(),
             ], 422);
         }
-        return response()->json(['ok' => true]);
+
+        $previous = DB::getDefaultConnection();
+        DB::setDefaultConnection('setup');
+        DB::purge($previous);
+
+        try {
+            Artisan::call('migrate', ['--force' => true]);
+        } catch (\Throwable $e) {
+            DB::setDefaultConnection($previous);
+            return response()->json([
+                'ok' => false,
+                'message' => 'Connection OK but migrations failed.',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+
+        DB::setDefaultConnection($previous);
+
+        return response()->json(['ok' => true, 'migrated' => true]);
     }
 
     public function uploadLogo(Request $request)
     {
-        $adminExists = User::where('role_id', '>=', 5)->exists();
+        $adminExists = false;
+        try {
+            $adminExists = User::where('role_id', '>=', 5)->exists();
+        } catch (\Throwable $e) {
+            $adminExists = false;
+        }
         if ($adminExists) {
             $user = $request->user();
             if (! $user || $user->role_id < 5) {
@@ -222,14 +254,17 @@ class SetupController extends Controller
         $file = $request->file('logo');
         $name = uniqid('logo_', true) . '.' . $file->getClientOriginalExtension();
 
-        // Store in persistent storage (public disk) so it survives deploys.
         $path = $file->storeAs('logos', $name, ['disk' => 'public']);
-        $stored = Storage::disk('public')->url($path);
-        $url = Str::startsWith($stored, ['http://', 'https://'])
-            ? $stored
-            : rtrim(config('app.url') ?: $request->getSchemeAndHttpHost(), '/') . '/' . ltrim($stored, '/');
+        $relative = 'storage/' . ltrim($path, '/');
+        $host = $request->getSchemeAndHttpHost() ?: config('app.url');
+        $url = rtrim($host, '/') . '/' . ltrim($relative, '/');
 
-        // Also persist to settings so everyone sees it.
+        try {
+            $source = Storage::disk('public')->path($path);
+            @copy($source, public_path('favicon.png'));
+        } catch (\Throwable $e) {
+        }
+
         Setting::updateOrCreate(
             ['key' => 'branding'],
             ['value' => ['logoUrl' => $url]]
@@ -273,7 +308,8 @@ class SetupController extends Controller
             if (! is_dir(dirname($store))) {
                 @mkdir(dirname($store), 0755, true);
             }
-        @copy($path, $store);
+            @copy($path, $store);
+        }
     }
 
     private static function formatEnvValue(string $value): string
@@ -284,5 +320,4 @@ class SetupController extends Controller
         }
         return "\"{$escaped}\"";
     }
-}
 }

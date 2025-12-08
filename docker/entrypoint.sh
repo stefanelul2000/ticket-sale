@@ -36,6 +36,10 @@ quote_env_value() {
 }
 
 # Sync runtime env overrides into the persisted .env so Laravel picks them up
+update_env_value "DB_HOST" "$DB_HOST"
+update_env_value "DB_DATABASE" "$DB_DATABASE"
+update_env_value "DB_USERNAME" "$DB_USERNAME"
+update_env_value "DB_PASSWORD" "$DB_PASSWORD"
 update_env_value "REDIS_HOST" "$REDIS_HOST"
 update_env_value "REDIS_PORT" "$REDIS_PORT"
 update_env_value "CACHE_DRIVER" "$CACHE_DRIVER"
@@ -53,15 +57,17 @@ php artisan storage:link >/dev/null 2>&1 || true
 chown www-data:www-data .env "$STORED_ENV"
 chmod 660 .env "$STORED_ENV"
 
-# Ensure writable storage/cache dirs
-chown -R www-data:www-data storage bootstrap/cache
-chmod -R 775 storage bootstrap/cache
+# Ensure framework subdirectories exist for file-based sessions/cache/views
+mkdir -p storage/framework/sessions storage/framework/cache/data storage/framework/views
 
-# Clear cached config/routes/views so new env values (e.g., APP_URL, REDIS_HOST) take effect
+# Ensure writable storage/cache/public dirs
+chown -R www-data:www-data storage bootstrap/cache public
+chmod -R 775 storage bootstrap/cache public
+
+# Clear cached config/routes so new env values (e.g., APP_URL, REDIS_HOST) take effect
 php artisan config:clear >/dev/null 2>&1 || true
 php artisan cache:clear >/dev/null 2>&1 || true
 php artisan route:clear >/dev/null 2>&1 || true
-php artisan view:clear >/dev/null 2>&1 || true
 
 # Run migrations/seed only once (unless you remove the provision mark).
 if [ ! -f "$PROVISION_MARK" ]; then
