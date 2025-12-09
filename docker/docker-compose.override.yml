@@ -24,6 +24,7 @@ services:
       APP_ENV: local
       APP_DEBUG: "true"
       VITE_API_URL: "http://localhost:8080/api"
+      GENERATE_L5_SWAGGER_ON_STARTUP: "true"
       FRONTEND_URL: "http://localhost:8080"
 
 volumes:
