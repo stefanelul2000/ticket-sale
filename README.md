@@ -39,6 +39,28 @@ php artisan migrate --database=mysql
 php artisan db:seed
 ```
 
+## Dev (recommended)
+For development and verification we recommend using the Docker environment with the dev override compose to keep runtime parity.
+
+To start the dev environment (bind mounts for source code are used so edits take effect immediately):
+```bash
+# build local app image and start services with the override
+make build-image
+cd docker
+docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
+```
+
+To run a CI-like smoke test locally (runs a MySQL + app image + /api/health check), use:
+```bash
+# default runs on port 8081 to avoid conflicts; override env if necessary
+make smoke-test
+```
+Or override the port or image explicitly:
+```bash
+SMOKE_PORT=8082 IMAGE=ghcr.io/yourorg/ticket-sale:dev-latest make smoke-test
+```
+
+See `docker/README.dev.md` for more detail on mounts, named volumes vs host bind mounts, and `nginx` vs `php artisan serve` options.
 ## Features (current)
 - Role-based access (viewer/check-in/seller/event manager/admin, site owner immutable).
 - Ticket generation with CSV/PNG sheet/ZIP of per-ticket barcodes.
