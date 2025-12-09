@@ -1,0 +1,46 @@
+services:
+  app:
+    container_name: ticket-sale-app
+    image: ghcr.io/stefanelul2000/ticket-sale:dev-latest
+    ports:
+      - "8080:80"
+    environment:
+      APP_ENV: production
+      APP_DEBUG: "false"
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
+      QUEUE_CONNECTION: sync
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # Set to your public frontend/API URL
+      VITE_API_URL: http://10.0.10.14:8080/api
+      FRONTEND_URL: http://10.0.10.14:8080
+    depends_on:
+      - db
+      - redis
+    working_dir: /var/www/html
+    volumes:
+      - /host/path/ticket-sale/storage:/var/www/html/storage
+      - /host/path/ticket-sale/config:/config
+
+  db:
+    container_name: ticket-sale-db
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: ticket_sale
+      MYSQL_USER: ticket_user
+      MYSQL_PASSWORD: ticket_pass
+      MYSQL_ROOT_PASSWORD: rootpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - db-data:/var/lib/mysql
+
+  redis:
+    container_name: ticket-sale-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  db-data:

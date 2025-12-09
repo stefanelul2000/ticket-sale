@@ -1,0 +1,331 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+
+:root {
+  --bg: #070910;
+  --panel: #0f1524;
+  --text: #f6f7fb;
+  --muted: #9fb1d2;
+  --accent: #ff7b6d;
+  --accent-2: #58e0c0;
+  --border: rgba(255, 255, 255, 0.09);
+  --radius: 14px;
+  --shadow: 0 26px 70px rgba(0, 0, 0, 0.35);
+  font-family: 'Space Grotesk', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(88, 224, 192, 0.12), transparent 30%),
+    radial-gradient(circle at 82% 12%, rgba(255, 123, 109, 0.12), transparent 32%),
+    radial-gradient(circle at 50% 80%, rgba(112, 143, 255, 0.12), transparent 35%),
+    #070910;
+  color: var(--text);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: transparent;
+}
+
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 36px 10px 12px;
+  font-weight: 600;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23f6f7fb' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.18);
+}
+
+select:focus {
+  outline: none;
+  border-color: rgba(255,255,255,0.25);
+  box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
+}
+
+option {
+  background-color: #0f1524;
+  color: var(--text);
+  font-weight: 600;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+}
+
+.surface {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+/* --- Responsive Layout Classes --- */
+
+.admin-users-invite {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 1fr 140px auto;
+  gap: 12px;
+  margin-bottom: 14px;
+  align-items: center;
+}
+
+.admin-users-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+  /* Handle extreme narrow widths on desktop gracefully */
+  overflow-x: auto; 
+}
+
+.admin-user-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr 150px auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid var(--border);
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  /* Ensure text shrinks before overflowing */
+  min-width: 0;
+}
+
+.admin-user-row > div {
+  /* Truncate long text in grid cells */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Events View Classes */
+.event-card {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--border);
+  padding: 10px 12px;
+  border-radius: 10px;
+}
+
+.event-summary-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.event-add-row-container {
+  display: grid;
+  grid-template-columns: 2fr 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.event-ticket-add-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 100px 100px;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+/* Ticket Type Card Redesign */
+.ticket-type-card {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  background: rgba(255,255,255,0.02);
+  display: flex;
+  flex-direction: column; /* Default stack on mobile */
+  gap: 8px;
+}
+
+.ticket-type-card-main-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.ticket-type-card-name {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.ticket-type-card-event {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.ticket-type-card-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.ticket-type-card-item {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.ticket-type-card-label {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ticket-type-card-kind {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: rgba(88,224,192,0.1);
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.ticket-type-card-price {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.ticket-type-card-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.branding-colors-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 12px;
+}
+
+.branding-container {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1.2fr 1fr;
+  align-items: start;
+}
+
+.sell-ticket-form {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.mobile-menu-btn {
+  /* Visibility controlled by React state (isMobile) */
+  display: inline-flex;
+}
+
+/* --- Mobile Breakpoint (< 900px) --- */
+@media (max-width: 900px) {
+  .layout-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .layout-header {
+    /* Layout.tsx handles grid-template-columns, no !important override needed */
+    /* display: grid !important; */
+    /* grid-template-columns: auto 1fr !important; */
+  }
+  
+  .sidebar {
+    display: none !important;
+  }
+
+  .sidebar.open {
+    display: grid !important;
+    position: relative !important;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    background: var(--panel);
+    max-height: none;
+    overflow: visible;
+  }
+
+  .two-col {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Admin Users Mobile */
+  .admin-users-invite {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+  .admin-users-invite > div {
+    justify-content: flex-start !important;
+  }
+  .admin-user-row {
+    grid-template-columns: 1fr !important;
+    gap: 8px;
+    align-items: stretch;
+  }
+  .admin-user-row select {
+    width: 100% !important;
+  }
+  .admin-user-row > div:last-child {
+    justify-content: space-between !important;
+    margin-top: 8px;
+  }
+  .admin-user-row > div {
+    white-space: normal; /* Allow wrapping on mobile cards */
+    overflow: visible;
+  }
+
+  /* Events Mobile */
+  .event-summary-row {
+    grid-template-columns: 1fr !important; /* Stack actions */
+  }
+  .event-summary-row > div:last-child {
+    justify-content: space-between !important;
+    margin-top: 8px;
+  }
+  
+  .event-add-row-container {
+    grid-template-columns: 1fr !important;
+  }
+  .event-ticket-add-container {
+    grid-template-columns: 1fr !important;
+  }
+  .event-generate-row > div:first-child {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  /* Ticket Type Card Mobile */
+  .ticket-type-card-details {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .ticket-type-card-actions {
+    justify-content: flex-start;
+  }
+
+  /* Branding Mobile */
+  .branding-colors-grid {
+    grid-template-columns: 1fr !important;
+  }
+  .branding-container {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Dashboard Mobile */
+  .sell-ticket-form {
+    grid-template-columns: 1fr !important;
+  }
+}

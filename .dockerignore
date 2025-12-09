@@ -1,0 +1,7 @@
+.git
+backups
+app/backend/storage
+app/backend/vendor
+app/frontend/node_modules
+node_modules
+*.log
