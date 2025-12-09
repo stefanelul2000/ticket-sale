@@ -3,7 +3,10 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: ${IMAGE_NAME:-ghcr.io/stefanelul2000/ticket-sale:dev-latest}
+    image: ${IMAGE_NAME:-ticket-sale:test}
+    container_name: ticket-sale-app
+    ports:
+      - "8080:80"
     volumes:
       # Source code bind mounts keep development fast (host -> container)
       - ../app/backend:/var/www/html:delegated
@@ -11,6 +14,9 @@ services:
       # Persist dependency installs to speed restarts. You can switch these to host-bind mounts if you prefer.
       - backend_vendor:/var/www/html/vendor
       - frontend_node_modules:/app/frontend/node_modules
+      # Local storage and config mounts for dev convenience
+      - ./local-storage:/var/www/html/storage
+      - ./local-config:/config
       # Alternative (host bind mounts) for vendor & node_modules -- uncomment to use host copies:
       # - ../app/backend/vendor:/var/www/html/vendor:delegated
       # - ../app/frontend/node_modules:/app/frontend/node_modules:delegated
@@ -18,7 +24,7 @@ services:
       APP_ENV: local
       APP_DEBUG: "true"
       VITE_API_URL: "http://localhost:8080/api"
-    command: ["sh", "-lc", "php artisan migrate --force; php artisan serve --host=0.0.0.0 --port=80"]
+      FRONTEND_URL: "http://localhost:8080"
 
 volumes:
   backend_vendor: {}

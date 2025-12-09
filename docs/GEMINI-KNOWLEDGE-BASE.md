@@ -83,6 +83,19 @@ The backend API is organized around the following primary resources (domains), d
 *   **Direct Business Logic:** Some business logic, particularly for `Setup` and `Impersonation`, is directly handled within route closures or dedicated controller methods. A distinct service layer is not explicitly observed as a widespread pattern at this stage.
 *   **Eloquent ORM:** Database interactions are primarily handled via Laravel's Eloquent ORM, with occasional direct usage of the `DB` facade (e.g., for logging impersonation actions).
 
+### Reverse Proxy / HTTPS considerations
+
+If the application runs behind a reverse proxy that terminates TLS (HTTPS) and forwards requests to the application over HTTP, the application must be configured to trust the proxy so that generated URLs and the request scheme are correct. Failure to do so often results in mixed-content loading errors in the browser, content-security-policy issues, and assets or endpoint URLs being generated with the wrong scheme (http instead of https.)
+
+Recommended steps:
+
+- Ensure your reverse proxy (e.g., nginx) forwards the `X-Forwarded-Proto` header: `proxy_set_header X-Forwarded-Proto $scheme;`.
+- Configure which proxies to trust by setting the `TRUSTED_PROXIES` environment variable (comma-separated addresses, or `*` to trust the request origin) — this project adds `config/trustedproxy.php` which reads `TRUSTED_PROXIES`.
+- Set `APP_URL` to match your public-facing URL (e.g., `https://ticket.ciubi.net`).
+- For the L5-Swagger UI specifically, you can prefer relative asset paths (avoids absolute scheme issues) by setting `L5_SWAGGER_USE_ABSOLUTE_PATH=false` or overriding it in `config/l5-swagger.php`. Optionally, set `L5_SWAGGER_PROXY` to the proxy IP(s) so the Swagger controller temporarily trusts them when rendering the UI.
+
+These steps together prevent mixed-content errors when serving the UI over HTTPS and ensure generated swagger URLs use the correct scheme.
+
 ### API Structure
 
 The `api.php` routes are generally grouped by functionality and protected by `auth:sanctum` and role-based middleware:
