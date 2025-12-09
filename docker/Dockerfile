@@ -31,25 +31,22 @@ RUN apk add --no-cache \
 
 WORKDIR /var/www/html
 
-# Copy backend (Laravel) code
+# Copy composer.json and composer.lock for dependency installation
+COPY app/backend/composer.json ./composer.json
+COPY app/backend/composer.lock ./composer.lock
+
+# Install Composer and backend dependencies
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
+
+# Copy the rest of the backend (Laravel) code
 COPY app/backend/ ./
 
 # Copy built frontend assets
 COPY --from=frontend /app/backend/public ./public
 
-# Restore Laravel front controller (because index.html overwrote it)
+# Restore Laravel front controller
 COPY app/backend/public/index.php ./public/index.php
-
-# ------------------------------
-# ADD RUNTIME CONFIG TEMPLATE
-# ------------------------------
-COPY docker/runtime-config.template.js /var/www/html/public/config.js
-
-
-
-# Install Composer and backend dependencies
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 
 # Nginx config
 RUN mkdir -p /run/nginx

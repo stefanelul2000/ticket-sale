@@ -6,9 +6,28 @@ use App\Models\Event;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use OpenApi\Attributes as OA;
 
 class EventController extends Controller
 {
+    #[OA\Get(
+        path: '/events',
+        summary: 'Get a list of all events with ticket counts',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: 'Successful operation',
+                content: new OA\JsonContent(
+                    type: 'array',
+                    items: new OA\Items(ref: '#/components/schemas/Event')
+                )
+            ),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized (requires role:4)'),
+        ]
+    )]
     public function index()
     {
         return Event::withCount([
@@ -20,6 +39,41 @@ class EventController extends Controller
         ])->orderBy('starts_at')->get();
     }
 
+    #[OA\Post(
+        path: '/events',
+        summary: 'Create a new event',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                properties: [
+                    new OA\Property(property: 'name', type: 'string', example: 'Summer Festival', minLength: 1, maxLength: 255),
+                    new OA\Property(property: 'slug', type: 'string', example: 'summer-festival', nullable: true, maxLength: 255),
+                    new OA\Property(property: 'is_online', type: 'boolean', example: false),
+                    new OA\Property(property: 'venue', type: 'string', nullable: true, example: 'Central Park', maxLength: 255),
+                    new OA\Property(property: 'city', type: 'string', nullable: true, example: 'New York', maxLength: 255),
+                    new OA\Property(property: 'country', type: 'string', nullable: true, example: 'USA', maxLength: 255),
+                    new OA\Property(property: 'starts_at', type: 'string', format: 'date-time', nullable: true, example: '2025-07-01T10:00:00Z'),
+                    new OA\Property(property: 'ends_at', type: 'string', format: 'date-time', nullable: true, example: '2025-07-03T22:00:00Z'),
+                    new OA\Property(property: 'capacity', type: 'integer', nullable: true, example: 5000, minimum: 0),
+                    new OA\Property(property: 'branding', type: 'object', nullable: true, description: 'JSON object for branding details'),
+                    new OA\Property(property: 'seo', type: 'object', nullable: true, description: 'JSON object for SEO details'),
+                ],
+                required: ['name']
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 201,
+                description: 'Event created successfully',
+                content: new OA\JsonContent(ref: '#/components/schemas/Event')
+            ),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized (requires role:4)'),
+            new OA\Response(response: 422, description: 'Validation error'),
+        ]
+    )]
     public function store(Request $request)
     {
         $data = $this->validated($request);
@@ -37,6 +91,50 @@ class EventController extends Controller
         );
     }
 
+    #[OA\Patch(
+        path: '/events/{eventId}',
+        summary: 'Update an existing event',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        parameters: [
+            new OA\Parameter(
+                name: 'eventId',
+                in: 'path',
+                description: 'ID of the event to update',
+                required: true,
+                schema: new OA\Schema(type: 'integer', format: 'int64', example: 1)
+            ),
+        ],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                properties: [
+                    new OA\Property(property: 'name', type: 'string', example: 'Updated Festival Name', minLength: 1, maxLength: 255),
+                    new OA\Property(property: 'slug', type: 'string', example: 'updated-festival-name', nullable: true, maxLength: 255),
+                    new OA\Property(property: 'is_online', type: 'boolean', example: false),
+                    new OA\Property(property: 'venue', type: 'string', nullable: true, example: 'New Central Park', maxLength: 255),
+                    new OA\Property(property: 'city', type: 'string', nullable: true, example: 'New York', maxLength: 255),
+                    new OA\Property(property: 'country', type: 'string', nullable: true, example: 'USA', maxLength: 255),
+                    new OA\Property(property: 'starts_at', type: 'string', format: 'date-time', nullable: true, example: '2025-07-01T10:00:00Z'),
+                    new OA\Property(property: 'ends_at', type: 'string', format: 'date-time', nullable: true, example: '2025-07-03T22:00:00Z'),
+                    new OA\Property(property: 'capacity', type: 'integer', nullable: true, example: 6000, minimum: 0),
+                    new OA\Property(property: 'branding', type: 'object', nullable: true, description: 'JSON object for branding details'),
+                    new OA\Property(property: 'seo', type: 'object', nullable: true, description: 'JSON object for SEO details'),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: 'Event updated successfully',
+                content: new OA\JsonContent(ref: '#/components/schemas/Event')
+            ),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized (requires role:4)'),
+            new OA\Response(response: 404, description: 'Event not found'),
+            new OA\Response(response: 422, description: 'Validation error'),
+        ]
+    )]
     public function update(Request $request, int $eventId)
     {
         $event = Event::findOrFail($eventId);
@@ -71,6 +169,35 @@ class EventController extends Controller
         ]);
     }
 
+    #[OA\Delete(
+        path: '/events/{eventId}',
+        summary: 'Delete an event',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        parameters: [
+            new OA\Parameter(
+                name: 'eventId',
+                in: 'path',
+                description: 'ID of the event to delete',
+                required: true,
+                schema: new OA\Schema(type: 'integer', format: 'int64', example: 1)
+            ),
+        ],
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: 'Event deleted successfully',
+                content: new OA\JsonContent(
+                    properties: [
+                        new OA\Property(property: 'deleted', type: 'boolean', example: true),
+                    ]
+                )
+            ),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized (requires role:4)'),
+            new OA\Response(response: 404, description: 'Event not found'),
+        ]
+    )]
     public function destroy(int $eventId)
     {
         $event = Event::findOrFail($eventId);
