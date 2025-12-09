@@ -28,7 +28,11 @@ jobs:
             # push to master - compare previous commit
             CHANGED=$(git diff --name-only HEAD^..HEAD || true)
           fi
-          echo "changed=$CHANGED" >> $GITHUB_OUTPUT
+          # Use the multiline safe output format to set the action output
+          echo "changed<<EOF" >> $GITHUB_OUTPUT
+          printf "%s
+" "$CHANGED" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
 
       - name: Run sensitive files check
         run: |
@@ -40,4 +44,10 @@ jobs:
           fi
           # Make script executable
           chmod +x ./scripts/check-sensitive-files.sh
-          echo "$CHANGED" | xargs -r ./scripts/check-sensitive-files.sh
+          # Convert the newline-separated list into a Bash array safely and pass as args
+          mapfile -t FILES <<< "$CHANGED"
+          if [ ${#FILES[@]} -eq 0 ]; then
+            echo "No changed files detected"
+            exit 0
+          fi
+          ./scripts/check-sensitive-files.sh "${FILES[@]}"
