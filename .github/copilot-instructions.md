@@ -116,6 +116,22 @@ If you are unsure
 - Run the standard local dev flow with Docker, `docker compose up -d --build` and confirm the health endpoint (`GET /api/health`) and the UI (`/`) are reachable.
 - Read `app/backend/routes/api.php` to verify exact role/perm restrictions and `app/frontend/src/lib/api.ts` for the expected client contract.
 
+## Agent Git & Commit Guidance (for Copilot / AI agents)
+
+- Do not commit every file you change as tiny single-file commits. Prefer grouping related edits into meaningful, testable commits and keep your commit count reasonable.
+- When possible, batch changes into commits that touch **no more than ~10 files** per commit. This keeps reviews focused and the commit history clear — but use judgement (some changes will span more files).
+- Commit message format: `type(scope): short description` (e.g., `feat(auth): add impersonation`, `fix(api): handle pagination`, `chore(docs): update dev README`). Use `feat`, `fix`, `refactor`, `chore`, `test`, `docs` types.
+- Stage changes selectively using `git add file1 file2 ...` or `git add -p` to interactively stage hunks. A quick helper to stage the next 10 files (use with caution and inspect before committing):
+	```bash
+	git add $(git status -s | awk '{print $2}' | head -n 10)
+	git diff --staged --name-only
+	git commit -m "<type>(<scope>): <brief description>"
+	```
+- If your change impacts both frontend and backend in a single logical update, consider separate commits for each area (`feat(frontend): ...`, `feat(backend): ...`) instead of one monolithic commit.
+- Avoid committing generated artifacts or build directories (e.g., `node_modules`, `public/dist`, `vendor`) — ensure `.gitignore` excludes these.
+- When in doubt, use `git rebase -i HEAD~n` to squash trivial iterative commits into a single coherent commit before opening your PR. The repository uses Squash & Merge for PRs — align commit granularity to the PR scope.
+- Keep each PR focused: group related changes into a single PR with small, descriptive commits. A typical PR should be reviewable in 10–20 minutes.
+
 ## Dev helpers (Makefile & smoke test)
 We added a small Makefile and a smoke test script to simplify running the recommended dev workflows.
 
