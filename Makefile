@@ -12,7 +12,11 @@ dev: build-image
 
 # Build the dev image
 build-image:
-	docker build -f $(DOCKER_COMPOSE_DIR)/Dockerfile -t $(IMAGE_NAME) .
+	docker build -f $(DOCKER_COMPOSE_DIR)/Dockerfile \
+		--build-arg APP_URL=http://localhost:8080 \
+		-t $(IMAGE_NAME) .
+
+# The image is built to include the swagger JSON by default (BUILD_GENERATE_SWAGGER)
 
 # Run interactive shell in app container
 shell:

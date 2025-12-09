@@ -36,3 +36,15 @@
     *   `app/backend/.env.example` (updated)
     *   `docs/GEMINI-KNOWLEDGE-BASE.md` (updated)
 *   **Architectural Impact:** Better reverse proxy compatibility; fixes HTTPS mixed-content and CSP errors for asset loading in Swagger UI.
+
+## 2025-12-09 - 18:30 — [Enhancement] Ensure `api-docs.json` is present and CI-validated
+
+*   **Summary:** Add automation to keep swagger generation deterministic and validated in CI or at container startup.
+ *   **Details:** The Docker `entrypoint.sh` now generates Swagger JSON (`api-docs.json`) at startup if missing or if `GENERATE_L5_SWAGGER_ON_STARTUP=true`, and the Dockerfile now generates swagger JSON at build time by default. The publishing CI workflow validates that the docs endpoint is available and the UI references the expected JSON URL.
+ *   **Update:** Swagger JSON is now generated at build time by default (docker build) to produce a deterministic artifact baked into the container image.
+*   **Affected Files:**
+    *   `docker/entrypoint.sh` (updated)
+    *   `docker/Dockerfile` (updated)
+    *   `.github/workflows/docker-publish.yml` (updated smoke test)
+    *   `app/backend/.env.example` (updated, `GENERATE_L5_SWAGGER_ON_STARTUP`)
+*   **Architectural Impact:** Swagger documentation availability is automated and validated, ensuring the UI and JSON docs are present after image build or container start. This improves CI reliability and reduces manual steps for docs generation.

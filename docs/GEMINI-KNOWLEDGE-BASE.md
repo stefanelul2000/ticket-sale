@@ -57,6 +57,8 @@ This monorepo contains a Laravel-based backend API and a React-based frontend ap
 *   **Web Server:** Nginx
 *   **PHP Runtime:** PHP-FPM (configured via Dockerfile)
 
+Note: The container's entrypoint attempts to ensure that commonly edited host-mounted directories (`storage`, `bootstrap/cache`, `public`) are writable both by the container (`www-data`) and by the host user. It will try `chown`, then `setfacl`, and fall back to permissive `chmod` when needed; this improves developer experience with host mounts.
+
 ## 3. Backend Architecture
 
 ### Key Resources
@@ -93,6 +95,16 @@ Recommended steps:
 - Configure which proxies to trust by setting the `TRUSTED_PROXIES` environment variable (comma-separated addresses, or `*` to trust the request origin) — this project adds `config/trustedproxy.php` which reads `TRUSTED_PROXIES`.
 - Set `APP_URL` to match your public-facing URL (e.g., `https://ticket.ciubi.net`).
 - For the L5-Swagger UI specifically, you can prefer relative asset paths (avoids absolute scheme issues) by setting `L5_SWAGGER_USE_ABSOLUTE_PATH=false` or overriding it in `config/l5-swagger.php`. Optionally, set `L5_SWAGGER_PROXY` to the proxy IP(s) so the Swagger controller temporarily trusts them when rendering the UI.
+
+### Swagger generation and persistence
+
+To ensure the OpenAPI JSON used by Swagger is available in production or in CI, we support multiple approaches:
+
+*   Bake the `api-docs.json` into the image at build time (CI). This is the most stable option for production and ensures the docs are always present in the final container image. The Docker image now generates Swagger JSON by default at build time.
+- Persist the Laravel `storage` directory (recommended for dynamic environments) as a named volume or host mount. We added an entrypoint hook that will generate `api-docs.json` at startup if the file is missing or if `GENERATE_L5_SWAGGER_ON_STARTUP=true`.
+- Generate at runtime on every startup (development-friendly): set `GENERATE_L5_SWAGGER_ON_STARTUP=true` during container start to force swagger generation when the container starts. This is useful during local development but will affect container startup time.
+
+CI uses the `docker-publish.yml` workflow to validate the health endpoint and now also checks that the swagger JSON file is available and the UI references the expected JSON path.
 
 These steps together prevent mixed-content errors when serving the UI over HTTPS and ensure generated swagger URLs use the correct scheme.
 

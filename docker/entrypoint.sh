@@ -65,6 +65,50 @@ mkdir -p storage/framework/sessions storage/framework/cache/data storage/framewo
 chown -R www-data:www-data storage bootstrap/cache public
 chmod -R 775 storage bootstrap/cache public
 
+# Ensure host-mounted files are editable for host users and still writable by the webserver
+umask 0002
+
+ensure_writable_dir() {
+  dir="$1"
+  [ -d "$dir" ] || return 0
+  # Try to chown everything to www-data; if it succeeds, we're done
+  if chown -R www-data:www-data "$dir" >/dev/null 2>&1; then
+    chmod -R 775 "$dir" >/dev/null 2>&1 || true
+    return 0
+  fi
+
+  # If chown didn't work (e.g. host mount where chown is not permitted), try ACLs if available
+  if command -v setfacl >/dev/null 2>&1; then
+    echo "Applying ACL for www-data on $dir"
+    setfacl -R -m u:www-data:rwX -m g:www-data:rwX "$dir" || true
+    setfacl -R -d -m u:www-data:rwX -m g:www-data:rwX "$dir" || true
+    return 0
+  fi
+
+  # Last resort: make files and directories readable/writable by group and public (for dev only)
+  echo "Applying permissive permissions on $dir"
+  find "$dir" -type d -exec chmod 2775 {} \; 2>/dev/null || true
+  find "$dir" -type f -exec chmod 0664 {} \; 2>/dev/null || true
+}
+
+ensure_writable_dir storage
+ensure_writable_dir bootstrap/cache
+ensure_writable_dir public
+ensure_writable_dir /var/www/html
+
+# ----------------------------------------
+# Generate Swagger JSON on startup (if missing or if explicitly enabled)
+# ----------------------------------------
+# Use GENERATE_L5_SWAGGER_ON_STARTUP=true to always run, or false to only generate if missing
+GENERATE_L5_SWAGGER_ON_STARTUP="${GENERATE_L5_SWAGGER_ON_STARTUP:-false}"
+if [ "${GENERATE_L5_SWAGGER_ON_STARTUP}" = "true" ] || [ ! -f /var/www/html/storage/api-docs/api-docs.json ]; then
+  echo "Generating L5 Swagger JSON (startup)..."
+  # Attempt to generate swagger JSON; ignore failures to avoid blocking startup
+  php artisan l5-swagger:generate || true
+  # Fix ownership if host bind mounted created root-owned files
+  chown -R www-data:www-data /var/www/html/storage/api-docs || true
+fi
+
 # Clear cached config/routes so new env values (e.g., APP_URL, REDIS_HOST) take effect
 php artisan config:clear >/dev/null 2>&1 || true
 php artisan cache:clear >/dev/null 2>&1 || true

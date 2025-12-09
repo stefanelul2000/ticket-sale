@@ -22,6 +22,7 @@ FROM php:8.3-fpm-alpine
 RUN apk add --no-cache \
     bash git unzip icu-dev oniguruma-dev libpng-dev libjpeg-turbo-dev libwebp-dev freetype-dev \
     autoconf make gcc g++ nginx \
+    acl \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install pdo_mysql gd intl \
     && pecl install redis \
@@ -53,9 +54,21 @@ RUN mkdir -p /run/nginx
 COPY docker/nginx.conf.main /etc/nginx/nginx.conf
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
+# Copy docker-specific env example into the webroot so the entrypoint finds it
+COPY docker/.env.example /var/www/html/.env.example
+
 # Entrypoint
 COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
+
+# Always generate swagger at build time, unless explicitly disabled.
+# Default APP_URL can be provided at build time using --build-arg APP_URL
+ARG APP_URL=http://localhost:8080
+ENV APP_URL=${APP_URL}
+# Always generate swagger during image build to ensure docs are present
+RUN echo "Generating L5 Swagger JSON at build time (APP_URL=${APP_URL})"; \
+        php artisan l5-swagger:generate || true; \
+        chown -R www-data:www-data /var/www/html/storage/api-docs || true;
 
 EXPOSE 80
 

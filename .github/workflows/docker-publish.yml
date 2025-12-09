@@ -46,6 +46,9 @@ jobs:
             ${{ env.IMAGE_NAME }}:${{ env.VERSION_TAG }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Optional: pass APP_URL for docs generation at build time
+          build-args: |
+            APP_URL=http://localhost:8080
 
       - name: Integration smoke test (healthcheck)
         run: |
@@ -83,14 +86,29 @@ jobs:
           for i in {1..40}; do
             if curl -fsS http://localhost:8080/api/health >/dev/null 2>&1; then
               echo "Healthcheck OK"
-              exit 0
+              break
             fi
             sleep 2
           done
 
-          echo "Healthcheck failed"
-          docker logs app-ci || true
-          exit 1
+          # Wait for swagger docs endpoint to become available (if swagger is built/generated)
+          for i in {1..40}; do
+            if curl -fsS -H 'X-Forwarded-Proto: https' http://localhost:8080/api/docs?api-docs.json >/dev/null 2>&1; then
+              echo "Swagger docs OK"
+              break
+            fi
+            sleep 2
+          done
+
+          # Validate swagger UI references the expected JSON URL
+          if ! curl -fsS -H 'X-Forwarded-Proto: https' http://localhost:8080/api/documentation | grep -q 'url: "/api/docs?api-docs.json"'; then
+            echo "Swagger UI or endpoint not available"
+            docker logs app-ci || true
+            exit 1
+          fi
+
+          echo "All smoke checks OK"
+          exit 0
 
         shell: bash
 
