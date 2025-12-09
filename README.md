@@ -61,7 +61,6 @@ SMOKE_PORT=8082 IMAGE=ghcr.io/yourorg/ticket-sale:dev-latest make smoke-test
 ```
 
 See `docker/README.dev.md` for more detail on mounts, named volumes vs host bind mounts, and `nginx` vs `php artisan serve` options.
-
 ## Features (current)
 - Role-based access (viewer/check-in/seller/event manager/admin, site owner immutable).
 - Ticket generation with CSV/PNG sheet/ZIP of per-ticket barcodes.
