@@ -53,6 +53,19 @@ Before opening a PR, ensure the following:
 > Repository policy: **Squash & merge**
 - We prefer pull requests to be merged using GitHub's `Squash and merge` option so feature branches have a single logical commit in master. Use the PR template to ensure your PRs follow the required checklist.
 
+## Prevent committing sensitive files
+
+To reduce the risk of accidentally committing secrets or private keys, this repository includes a pre-commit hook and a GitHub Action that prevent commits/PRs that add sensitive files such as `.env`, private keys, or `config/app.env`.
+
+- To enable the local pre-commit hook, run:
+```bash
+make install-hooks
+```
+- The hook checks staged files and blocks the commit if it finds sensitive files. If you need to commit an example file, rename it to end with `.example` (e.g., `.env.example`).
+- The repository also includes a GitHub Action (`.github/workflows/prevent-sensitive-commits.yml`) that runs on pushes and PRs and prevents changes that add these sensitive paths.
+
+If you believe a file is marked incorrectly or you need an exception, open an issue or a PR describing why the file is necessary and how it was audited.
+
 ## PR - How to test locally
 ```bash
 make build-image

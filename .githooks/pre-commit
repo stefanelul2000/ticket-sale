@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# pre-commit git hook to block committing sensitive files
+ROOT_DIR=$(git rev-parse --show-toplevel)
+"$ROOT_DIR/scripts/check-sensitive-files.sh"
+
+exit 0

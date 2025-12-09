@@ -42,5 +42,9 @@ cleanup:
 smoke-test:
 	./scripts/smoke-test-local.sh
 
+# Install git hooks for the current repository (installs hook to block sensitive files)
+install-hooks:
+	./scripts/install-hooks.sh
+
 # Convenience: rebuild and run tests
 rebuild-test: build-image dev test
