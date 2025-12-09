@@ -132,6 +132,13 @@ If you are unsure
 - When in doubt, use `git rebase -i HEAD~n` to squash trivial iterative commits into a single coherent commit before opening your PR. The repository uses Squash & Merge for PRs — align commit granularity to the PR scope.
 - Keep each PR focused: group related changes into a single PR with small, descriptive commits. A typical PR should be reviewable in 10–20 minutes.
 
+### Sensitive-file policy
+
+- This repository blocks accidental commits of sensitive files (e.g., `.env`, `config/app.env`, private keys like `.pem`/`.key`) using a pre-commit hook and a GitHub Action. Do not attempt to commit these files.
+- Install the local git hooks with `make install-hooks` or `./scripts/install-hooks.sh`. Hooks are discretionary (developers can disable them), but the GitHub Action ensures server-side enforcement on PRs.
+- If you need to commit a template file, use a `.example` suffix (e.g. `.env.example`) and add it to the `{contributing|docs} note` explaining why it's safe.
+- If a change absolutely requires a sensitive file commit (e.g., adding a new encrypted key in a secure process), open a public issue to document why and get maintainers' approval; we'll provide a safe workflow for exceptions.
+
 ## Dev helpers (Makefile & smoke test)
 We added a small Makefile and a smoke test script to simplify running the recommended dev workflows.
 
