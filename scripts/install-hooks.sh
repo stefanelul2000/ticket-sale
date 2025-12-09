@@ -7,9 +7,10 @@ HOOKS_DIR="$ROOT_DIR/.githooks"
 echo "Installing git hooks to $HOOKS_DIR"
 mkdir -p "$HOOKS_DIR"
 
-# Copy our pre-commit script to hooks dir (and make executable)
-cp "$ROOT_DIR/.githooks/pre-commit" "$HOOKS_DIR/pre-commit"
-chmod +x "$HOOKS_DIR/pre-commit"
+# Ensure hook script is executable
+if [ -f "$ROOT_DIR/.githooks/pre-commit" ]; then
+  chmod +x "$ROOT_DIR/.githooks/pre-commit"
+fi
 
 # Ensure the scripts directory has the main script too (not required, just safety)
 if [ -f "$ROOT_DIR/scripts/prevent-commit-sensitive.sh" ]; then
