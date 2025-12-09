@@ -1,8 +1,6 @@
 .env
 *.env
 docker/local*
-docs
-docs/*
 app/backend/.env
 app/backend/storage/logs/*
 app/backend/storage/framework/cache/*
@@ -17,8 +15,7 @@ app/backend/public/uploads/
 app/backend/public/uploads/*
 backups/
 AGENTS.md
-.gemini/
-.gemini/*
+GEMINI.md
 *-compose.local.yml
 *.log
 *.sqlite
