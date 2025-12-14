@@ -39,6 +39,35 @@ class EventController extends Controller
         ])->orderBy('starts_at')->get();
     }
 
+    #[OA\Get(
+        path: '/events/summary',
+        summary: 'Get lightweight event summaries',
+        security: [['sanctum' => []]],
+        tags: ['Events'],
+        responses: [
+            new OA\Response(
+                response: 200,
+                description: 'Successful operation',
+                content: new OA\JsonContent(
+                    type: 'array',
+                    items: new OA\Items(
+                        properties: [
+                            new OA\Property(property: 'id', type: 'integer', example: 1),
+                            new OA\Property(property: 'name', type: 'string', example: 'Launch Party'),
+                            new OA\Property(property: 'starts_at', type: 'string', format: 'date-time', nullable: true),
+                        ]
+                    )
+                )
+            ),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized (requires role:2)'),
+        ]
+    )]
+    public function summary()
+    {
+        return Event::orderBy('starts_at')->get(['id', 'name', 'starts_at']);
+    }
+
     #[OA\Post(
         path: '/events',
         summary: 'Create a new event',

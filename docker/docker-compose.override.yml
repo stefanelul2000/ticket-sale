@@ -26,6 +26,18 @@ services:
       VITE_API_URL: "http://localhost:8080/api"
       GENERATE_L5_SWAGGER_ON_STARTUP: "true"
       FRONTEND_URL: "http://localhost:8080"
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:5
+    container_name: ticket-sale-phpmyadmin
+    depends_on:
+      - db
+    environment:
+      PMA_HOST: db
+      PMA_USER: ticket_user
+      PMA_PASSWORD: ticket_pass
+      PMA_ABSOLUTE_URI: http://localhost:8081/
+    ports:
+      - "8081:80"
 
 volumes:
   backend_vendor: {}

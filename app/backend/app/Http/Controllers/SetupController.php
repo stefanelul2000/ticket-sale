@@ -20,47 +20,34 @@ class SetupController extends Controller
 {
     public function status()
     {
-        if (! $this->isSetupEnabled()) {
-            try {
-                $adminExists = User::where('role_id', '>=', 5)->exists();
-            } catch (\Throwable $e) {
-                $adminExists = true;
-            }
+        [$adminExists, $dbError] = $this->adminState();
 
-            return response()->json([
-                'needsSetup' => false,
-                'adminExists' => $adminExists,
-            ]);
-        }
-
-        try {
-            $adminExists = User::where('role_id', '>=', 5)->exists();
-            return response()->json([
-                'needsSetup' => ! $adminExists,
-                'adminExists' => $adminExists,
-            ]);
-        } catch (\Throwable $e) {
-            // If DB is not configured or unreachable, still surface setup.
+        if ($dbError) {
             return response()->json([
                 'needsSetup' => true,
                 'adminExists' => false,
                 'dbError' => 'Database not reachable yet; setup required.',
             ]);
         }
+
+        if (! $this->isSetupEnabled() && ! $adminExists) {
+            return response()->json([
+                'needsSetup' => true,
+                'adminExists' => false,
+                'setupDisabled' => true,
+            ]);
+        }
+
+        return response()->json([
+            'needsSetup' => ! $adminExists,
+            'adminExists' => $adminExists,
+        ]);
     }
 
     public function create(Request $request)
     {
-        if (! $this->isSetupEnabled()) {
-            throw new AccessDeniedHttpException('Setup is disabled.');
-        }
+        [$adminExists, $dbError] = $this->adminState();
 
-        $adminExists = false;
-        try {
-            $adminExists = User::where('role_id', '>=', 5)->exists();
-        } catch (\Throwable $e) {
-            $adminExists = false;
-        }
         if ($adminExists) {
             throw new AccessDeniedHttpException('Setup already completed.');
         }
@@ -72,7 +59,7 @@ class SetupController extends Controller
             'db_password' => ['required', 'string'],
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
-            'username' => ['required', 'string', 'max:255', 'unique:users,username'],
+            'username' => ['required', 'string', 'max:255'],
             'password' => ['required', 'confirmed', Password::min(12)->mixedCase()->numbers()->symbols()],
             'mail_mailer' => ['nullable', 'string'],
             'mail_host' => ['nullable', 'string'],
@@ -110,6 +97,12 @@ class SetupController extends Controller
                 'message' => 'Database migrations failed during setup.',
                 'error' => $e->getMessage(),
             ], 500);
+        }
+
+        if (User::where('username', $data['username'])->exists()) {
+            return response()->json([
+                'message' => 'Username already exists in this database.',
+            ], 422);
         }
 
         $roles = [
@@ -205,7 +198,10 @@ class SetupController extends Controller
     public function testDatabase(Request $request)
     {
         if (! $this->isSetupEnabled()) {
-            throw new AccessDeniedHttpException('Setup is disabled.');
+            [$adminExists] = $this->adminState();
+            if ($adminExists) {
+                throw new AccessDeniedHttpException('Setup is disabled.');
+            }
         }
 
         $data = $request->validate([
@@ -256,12 +252,7 @@ class SetupController extends Controller
 
     public function uploadLogo(Request $request)
     {
-        $adminExists = false;
-        try {
-            $adminExists = User::where('role_id', '>=', 5)->exists();
-        } catch (\Throwable $e) {
-            $adminExists = false;
-        }
+        [$adminExists] = $this->adminState();
         if ($adminExists) {
             $user = $request->user();
             if (! $user || $user->role_id < 5) {
@@ -300,6 +291,16 @@ class SetupController extends Controller
         $value = strtolower((string) env('SETUP_ENABLED', 'true'));
 
         return in_array($value, ['1', 'true', 'yes', 'on'], true);
+    }
+
+    private function adminState(): array
+    {
+        try {
+            $adminExists = User::where('role_id', '>=', 5)->exists();
+            return [$adminExists, null];
+        } catch (\Throwable $e) {
+            return [false, $e->getMessage()];
+        }
     }
 
     private function writeEnv(array $pairs): void

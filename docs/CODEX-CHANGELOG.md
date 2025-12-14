@@ -1,0 +1,75 @@
+# Codex Changelog
+
+## 2025-12-14 - 15:45 — Event summaries for ticket ledger access
+- Added `/events/summary` (role ≥2) to provide lightweight event lists without exposing full event management data.
+- Updated the Tickets page + API client to call the summary endpoint so Check-in roles can load the ledger dropdown without 403 errors.
+- Documented the new endpoint across API and frontend references to keep role mappings accurate.
+
+## 2025-12-14 - 16:20 — Admin user editing
+- Added `PATCH /users/{id}` so admins can update staff names, usernames, emails, or reset passwords without deleting the account.
+- Extended the Admin Users UI with an edit dialog hooked to the new API and exposed the helper via the frontend client map.
+- Updated API docs + knowledge base to reflect the new capability.
+
+## 2025-12-14 - 16:35 — Mobile card overflow fix
+- Updated the shared `Card` component to force `w-full`, preventing wide tables/forms from extending past the viewport on phones (affecting Events, Ticket Types, Tickets, and Admin Users).
+- No UI changes needed per page—the fix is centralized in `Card.tsx`.
+
+## 2025-12-14 - 16:42 — Responsive tables
+- Added `min-width` constraints to the Events, Ticket Types, Tickets, and Admin Users tables so they scroll horizontally within their cards instead of squeezing columns or overflowing on narrow screens. Mobile now also renders these datasets as stacked cards, eliminating the need for horizontal scrolling altogether.
+
+## 2025-12-14 - 14:30 — Ticket ledger view
+- Updated the Tickets page with an event selector and sales ledger table showing buyer, seller, and sold timestamps for each ticket.
+- Extended `/tickets` to accept `event_id`/`per_page` filters and include seller/event relations so the frontend can render targeted reports.
+- Documented the optional params in the API client map.
+
+## 2025-12-14 - 14:55 — Role-aware navigation & admin gating
+- Navigation now hides routes your (effective) role cannot access, and impersonation auto-redirects you to the proper landing page with a header control to stop impersonating.
+- Tickets, Events, and all admin pages enforce front-end role guards (no more 403s); branding changes immediately update the global theme.
+- Added reusable hooks/utilities for role checks and color blending to keep the UI consistent with branding.
+
+## 2025-12-14 - 14:40 — Admin branding & impersonation portals
+- Added `/admin/branding` for managing theme colors/logo and `/admin/impersonation` for switching roles.
+- Wired the admin submenu + router to surface the new pages and refreshed docs/component maps accordingly.
+
+## 2025-12-14 - 13:35 — Phase 4 cleanup removes legacy UI
+- Deleted the remaining legacy React files (`src/ui/views/**`, `src/ui/components/{Layout,Button,Card,ThemeControls}.tsx`, and `src/ui/styles.ts`) so every screen now lives under `src/ui/pages` with Tailwind primitives.
+- Verified navigation flows through `src/router.tsx` + `AppLayout`, ensuring sidebar links update the URL and there is no `setView` fallback.
+- Updated the knowledge base, component map, route map, and components doc to capture the all-router architecture.
+
+## 2025-12-14 - 13:46 — Mobile navigation updates
+- Enhanced `AppLayout` with a high-contrast menu toggle and relocated the desktop account controls into the sidebar footer so the UI remains discoverable across breakpoints.
+- Admin-only links now live inside a collapsible “Admin” group above the account card (showing only for high-role users) to declutter the primary navigation.
+- Removed the temporary mobile nav pill strip now that the drawer experience is polished; the menu button remains the single entry point.
+
+## 2025-12-14 - 00:39 — Tailwind + Router Scaffolding
+- Installed Tailwind CSS (with PostCSS/Autoprefixer) and wired `src/index.css` to boot Tailwind alongside the existing global styles.
+- Introduced `BrowserRouter` via `src/router.tsx`, preserved the prior UI inside `LegacyApp.tsx`, and added Tailwind placeholder pages plus a shared `Sidebar`.
+- Added runtime config shims (`public/config.js`) so `/config.js` resolves during Vite builds.
+- Documentation: created Codex knowledge base, changelog, updated frontend route map, and mapped API/frontend integrations.
+
+## 2025-12-14 - 01:10 — Build target toggle & DB bootstrap docs
+- Added a `BUILD_TO_BACKEND` toggle in `vite.config.ts` so local builds use `dist/` while release builds can still publish directly into `app/backend/public` without needing elevated permissions.
+- Documented the local migration requirement (`php artisan migrate --seed`) plus the new build flag inside the knowledge base to avoid SQL errors on fresh databases.
+
+## 2025-12-14 - 01:17 — Added phpMyAdmin to dev override
+- Updated `docker/docker-compose.override.yml` with a `phpmyadmin` service (port `8081`) wired to the MySQL container for quick database inspection during local development.
+- Documented the new helper service in `docs/infrastructure/docker.md`.
+
+## 2025-12-14 - 01:25 — Removed LegacyApp fallback
+- Deleted `src/ui/LegacyApp.tsx` and pointed all routes (including `/` and `/setup`) at the new Tailwind router pages so the modern SPA is the only experience rendered.
+- Cleaned up the sidebar and documentation to remove `/legacy` references, keeping the route map and component map aligned with the new structure.
+
+## 2025-12-14 - 02:00 — Completed router migration
+- Restored the full application experience by wiring the legacy dashboard, events, admin, setup, and auth views into React Router directly inside `src/ui/App.tsx`. Visiting `/dashboard`, `/events`, `/admin`, `/setup`, `/welcome`, `/login`, or `/register` now renders the full UI instead of placeholders.
+- Removed the temporary router placeholders (`src/router.tsx`, `src/ui/pages/`, `Sidebar.tsx`) and updated the knowledge base + component map + route map to describe the new structure.
+
+## 2025-12-14 - 02:20 — Tailwind shell + router foundation
+- Added Tailwind UI primitives under `src/ui/components/ui/` plus new `AppLayout` and `AuthLayout` shells to standardize navigation and auth screens.
+- Introduced `src/router.tsx` with `RequireAuth`, skeleton pages (`DashboardPage`, `EventsIndexPage`, `EventEditorPage`, `TicketsPage`, `AdminUsersPage`, `AdminRolesPage`, `LoginPage`, `RegisterPage`), and replaced the legacy `setView` entry point with `<RouterProvider />`.
+- Updated frontend documentation (knowledge base, component map, route map) to describe the new architecture.
+
+## 2025-12-14 - 02:40 — Phase 3: Dashboard + Events + Admin migrations
+- Migrated the legacy dashboard logic (stats cards, selling, verify/check-in, history log) into the new Tailwind `DashboardPage`.
+- Rebuilt events management: `EventsIndexPage` now handles event CRUD, ticket type management, ticket generation, and download workflows; `EventEditorPage` provides per-event editing for details and ticket types.
+- Ported administrative screens into `AdminUsersPage` (invites, role/status changes) and `AdminRolesPage` (permission toggles).
+- Documentation (knowledge base, component map, route map) updated to reflect the completed migrations.

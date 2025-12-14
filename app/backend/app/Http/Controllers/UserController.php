@@ -108,6 +108,81 @@ class UserController extends Controller
     }
 
     #[OA\Patch(
+        path: '/users/{userId}',
+        summary: 'Update a user profile',
+        security: [['sanctum' => []]],
+        tags: ['Users'],
+        parameters: [
+            new OA\Parameter(
+                name: 'userId',
+                in: 'path',
+                description: 'ID of the user to update',
+                required: true,
+                schema: new OA\Schema(type: 'integer', format: 'int64', example: 1)
+            ),
+        ],
+        requestBody: new OA\RequestBody(
+            required: true,
+            content: new OA\JsonContent(
+                properties: [
+                    new OA\Property(property: 'name', type: 'string', example: 'Jane Doe', nullable: true),
+                    new OA\Property(property: 'email', type: 'string', format: 'email', example: 'jane@example.com', nullable: true),
+                    new OA\Property(property: 'username', type: 'string', example: 'janedoe', nullable: true),
+                    new OA\Property(property: 'password', type: 'string', format: 'password', example: 'secret123', nullable: true),
+                ]
+            )
+        ),
+        responses: [
+            new OA\Response(response: 200, description: 'User updated successfully', content: new OA\JsonContent(ref: '#/components/schemas/User')),
+            new OA\Response(response: 401, description: 'Unauthenticated'),
+            new OA\Response(response: 403, description: 'Unauthorized (requires role:5)'),
+            new OA\Response(response: 404, description: 'User not found'),
+            new OA\Response(response: 422, description: 'Validation error'),
+        ]
+    )]
+    public function update(Request $request, int $userId)
+    {
+        $user = User::find($userId);
+        if (! $user) {
+            throw new NotFoundHttpException('User not found');
+        }
+
+        $data = $request->validate([
+            'name' => ['sometimes', 'string', 'max:255'],
+            'email' => ['sometimes', 'nullable', 'email', 'max:255', 'unique:users,email,' . $user->id],
+            'username' => ['sometimes', 'string', 'max:255', 'unique:users,username,' . $user->id],
+            'password' => ['sometimes', 'nullable', 'string', 'min:8'],
+        ]);
+
+        $changes = [];
+        if (array_key_exists('name', $data)) {
+            $changes['name'] = $data['name'];
+        }
+        if (array_key_exists('email', $data)) {
+            $changes['email'] = $data['email'];
+        }
+        if (array_key_exists('username', $data)) {
+            $changes['username'] = $data['username'];
+        }
+        if (array_key_exists('password', $data) && $data['password']) {
+            $changes['password'] = Hash::make($data['password']);
+        }
+
+        if (empty($changes)) {
+            return response()->json($user);
+        }
+
+        $user->update($changes);
+
+        $this->logAdminAction($request->user()?->id, 'user.profile.update', [
+            'target_user_id' => $user->id,
+            'fields' => array_keys($changes),
+        ]);
+
+        return response()->json($user);
+    }
+
+    #[OA\Patch(
         path: '/users/{userId}/role',
         summary: 'Update a user\'s role',
         security: [['sanctum' => []]],

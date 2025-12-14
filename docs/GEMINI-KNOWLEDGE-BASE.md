@@ -135,11 +135,13 @@ The `api.php` routes are generally grouped by functionality and protected by `au
     *   `routes/api.php`: Definitions for all backend API routes.
     *   `app/Http/Middleware`: Custom middleware for roles and impersonation.
 *   `/app/frontend`: The React application.
-    *   `src/main.tsx`: Entry point for the React application.
+    *   `src/main.tsx`: Entry point that mounts `<App />`.
+    *   `src/router.tsx` + `src/router/RequireAuth.tsx`: Declares the BrowserRouter tree and gatekeeper for protected routes.
+    *   `src/layouts`: Shared shells for authenticated (`AppLayout`) and auth (`AuthLayout`) experiences.
     *   `src/lib/api.ts`: Centralized API client for interacting with the backend.
     *   `src/state`: Contains Zustand stores for global state management (e.g., `useAuth`, `useTheme`).
-    *   `src/ui/components`: Reusable UI components (e.g., `Button`, `Card`, `Layout`).
-    *   `src/ui/views`: Page-level components or views, often corresponding to routes (e.g., `admin`, `dashboard`, `events`, `auth`).
+    *   `src/ui/components/ui`: Tailwind primitives (Button, Card, Input, Spinner) shared across pages.
+    *   `src/ui/pages`: Page-level components mapped to router paths (dashboard, events, admin, auth, etc.).
 *   `/docker`: Contains Docker related files for local development and deployment.
     *   `docker-compose.yml`: Defines the multi-container Docker application.
     *   `Dockerfile`: Defines the Docker image for the application.

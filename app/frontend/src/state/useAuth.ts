@@ -6,7 +6,10 @@ type User = {
   name: string;
   username: string;
   role_id: number;
+  original_role_id?: number;
+  impersonating?: boolean;
   role?: { id: number; name: string };
+  original_role?: { id: number; name: string };
 };
 
 type AuthState = {
@@ -16,6 +19,7 @@ type AuthState = {
   login: (username: string, password: string, remember?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
+  stopImpersonation: () => Promise<void>;
 };
 
 export const useAuth = create<AuthState>((set) => ({
@@ -69,5 +73,10 @@ export const useAuth = create<AuthState>((set) => ({
     } finally {
       set({ loading: false });
     }
+  },
+  stopImpersonation: async () => {
+    await api.stopImpersonate();
+    const user = await api.me();
+    set({ user });
   },
 }));

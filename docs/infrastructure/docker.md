@@ -7,6 +7,7 @@ This document details the Docker-related configuration for the project, includin
 *   `app`: Main application service (Laravel, Nginx, PHP-FPM) built from the Dockerfile, depends on `db` and `redis`.
 *   `db`: MySQL 8.0 database service.
 *   `redis`: Redis 7-alpine cache/queue service.
+*   `phpmyadmin` (override only): phpMyAdmin 5 service exposed on `http://localhost:8081` for convenient inspection of the `db` container.
 
 ## Ports
 

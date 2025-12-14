@@ -22,6 +22,7 @@ This document lists all available API endpoints, their methods, associated contr
 | GET | `/roles` | `UserController@roles` | List all roles. |
 | GET | `/users` | `UserController@index` | Get paginated list of users. |
 | POST | `/users` | `UserController@store` | Create a new user. |
+| PATCH | `/users/{userId}` | `UserController@update` | Edit name/username/email/password. |
 | PATCH | `/users/{userId}/role` | `UserController@updateRole` | Update a user's role. |
 | PATCH | `/users/{userId}/status` | `UserController@updateStatus` | Update a user's active status. |
 | DELETE | `/users/{userId}` | `UserController@destroy` | Delete a user. |
@@ -31,6 +32,7 @@ This document lists all available API endpoints, their methods, associated contr
 | POST | `/impersonate` | `Closure` | Start impersonation. |
 | POST | `/branding` | `BrandingController@update` | Update branding settings. |
 | GET | `/events` | `EventController@index` | List all events. |
+| GET | `/events/summary` | `EventController@summary` | Read-only list of event ids + names for lower roles. |
 | POST | `/events` | `EventController@store` | Create a new event. |
 | PATCH | `/events/{eventId}` | `EventController@update` | Update an event. |
 | DELETE | `/events/{eventId}` | `EventController@destroy` | Delete an event. |

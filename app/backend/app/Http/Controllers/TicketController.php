@@ -12,9 +12,15 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class TicketController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        return Ticket::with('event')->orderByDesc('created_at')->paginate(50);
+        $query = Ticket::with(['event', 'seller'])
+            ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
+            ->orderBy('ticket_number');
+
+        $perPage = max(1, min(2000, (int) $request->get('per_page', 50)));
+
+        return $query->paginate($perPage);
     }
 
     public function generate(Request $request)

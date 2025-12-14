@@ -1,12 +1,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Build directly into the Laravel public folder to avoid manual copy.
+const buildTarget = process.env.BUILD_TO_BACKEND === 'true' ? '../backend/public' : 'dist';
+
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: '../backend/public',
-    // Avoid wiping user-uploaded public assets during local builds; container builds copy a clean public anyway.
-    emptyOutDir: false,
+    outDir: buildTarget,
+    emptyOutDir: buildTarget === '../backend/public' ? false : true,
   },
 });

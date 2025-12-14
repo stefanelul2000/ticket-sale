@@ -8,6 +8,7 @@ use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketTypeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\BrandingController;
+use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -20,17 +21,27 @@ Route::post('/setup/test-db', [SetupController::class, 'testDatabase']);
 Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
     Route::get('/me', function (Request $request) {
         $user = $request->user();
+        if (! $user) {
+            return null;
+        }
+
+        $user->loadMissing('role');
+        $user->setAttribute('original_role_id', $user->role_id);
+        if ($user->relationLoaded('role')) {
+            $user->setRelation('original_role', $user->role);
+        }
+
         $impersonatedRoleId = $request->session()->get('impersonate_role_id');
-        if ($user && $impersonatedRoleId) {
-            $role = \App\Models\Role::find($impersonatedRoleId);
+        if ($impersonatedRoleId) {
+            $role = Role::find($impersonatedRoleId);
             if ($role) {
                 $user->setAttribute('impersonating', true);
                 $user->setAttribute('role_id', $role->id);
                 $user->setRelation('role', $role);
-                return $user;
             }
         }
-        return $user?->load('role');
+
+        return $user;
     });
 
     // Roles and users (admin / owner only)
@@ -38,6 +49,7 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
         Route::get('/roles', [UserController::class, 'roles']);
         Route::get('/users', [UserController::class, 'index']);
         Route::post('/users', [UserController::class, 'store']);
+        Route::patch('/users/{userId}', [UserController::class, 'update']);
         Route::patch('/users/{userId}/role', [UserController::class, 'updateRole']);
         Route::patch('/users/{userId}/status', [UserController::class, 'updateStatus']);
         Route::delete('/users/{userId}', [UserController::class, 'destroy']);
@@ -84,6 +96,7 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
 
     // Ticket flows
     Route::middleware('role:2')->group(function () {
+        Route::get('/events/summary', [EventController::class, 'summary']);
         Route::get('/tickets', [TicketController::class, 'index']);
         Route::get('/tickets/{ticketNumber}/verify', [TicketController::class, 'verify']);
         Route::post('/tickets/{ticketNumber}/checkin', [TicketController::class, 'checkin']);

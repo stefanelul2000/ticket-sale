@@ -27,26 +27,23 @@ The frontend components are organized logically within the `src/` directory, sep
 ├── state/
 │   ├── useAuth.ts (Zustand store for authentication logic and user state)
 │   └── useTheme.ts (Zustand store for managing application theme and branding settings)
-├── styles/
-│   └── global.css (Global CSS definitions, custom properties, and responsive layout classes)
+├── index.css (Global CSS definitions powered by Tailwind + design tokens)
+├── router/
+│   └── RequireAuth.tsx (Guards protected routes by checking the auth store)
+├── router.tsx (Browser router definition + layout wiring)
+├── layouts/
+│   ├── AppLayout.tsx (Sidebar/topbar shell for authenticated routes)
+│   └── AuthLayout.tsx (Centered layout for login/register)
 ├── ui/
-│   ├── App.tsx (The root React component, handling routing/view switching and global state orchestration)
-│   ├── styles.ts (TypeScript file for shared inline CSS styles, e.g., inputStyle, colorStyle)
+│   ├── App.tsx (The root React component hosting `<RouterProvider />`)
 │   ├── components/
-│   │   ├── Button.tsx (A reusable button component with different variants)
-│   │   ├── Card.tsx (A generic card component for displaying content blocks with titles and actions)
-│   │   ├── Layout.tsx (The primary layout component, including header, optional sidebar, and content area, with responsiveness)
-│   │   └── ThemeControls.tsx (UI component for adjusting and applying theme colors)
-│   └── views/
-│       ├── admin/
-│       │   └── AdminView.tsx (Dedicated view for administrative tasks: user management, role editing, branding)
-│       ├── auth/
-│       │   ├── LoginView.tsx (User login interface)
-│       │   └── RegisterView.tsx (User registration interface)
-│       ├── dashboard/
-│       │   └── DashboardView.tsx (Main application dashboard showing ticket selling/checking, and statistics)
-│       ├── events/
-│       │   └── EventsView.tsx (View for managing events and their associated ticket types)
-│       └── setup/
-│           └── SetupView.tsx (A wizard-like view for initial application setup and configuration)
+│   │   └── ui/ (Tailwind primitives such as `Button`, `Card`, `Input`, `Spinner`)
+│   └── pages/
+│       ├── DashboardPage.tsx (Dashboard stats + ticket ops)
+│       ├── EventsIndexPage.tsx / EventEditorPage.tsx (Event + ticket-type management)
+│       ├── TicketsPage.tsx (Ticket tooling placeholder)
+│       ├── AdminUsersPage.tsx / AdminRolesPage.tsx (RBAC management)
+│       └── LoginPage.tsx / RegisterPage.tsx (Auth flows rendered inside `AuthLayout`)
 ```
+
+Legacy folders such as `src/ui/views` and `src/ui/components/Layout.tsx` have been deleted; every page now lives under `src/ui/pages`.
