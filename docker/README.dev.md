@@ -20,20 +20,13 @@ Which files should be mounted?
   - ../app/frontend:/app/frontend:delegated
   ```
 
-Named volumes vs host-bind mounts for dependencies (vendor/node_modules)
-- Named volumes (default in `docker/docker-compose.override.yml`) are often recommended for reported performance benefits and to avoid mixing host-OS-dependencies with container OS dependencies.
-  ```yaml
-  - backend_vendor:/var/www/html/vendor
-  - frontend_node_modules:/app/frontend/node_modules
-  ```
-- Host bind mounts for `vendor` and `node_modules` can be used if you want to inspect installed packages easily on the host or prefer single-source artifact control. Example:
+Dependencies (vendor/node_modules)
+- The override now mounts the host `vendor` and `node_modules` directories so Composer/NPM installs on your workstation are immediately reflected inside the container (no empty named volumes to seed).
   ```yaml
   - ../app/backend/vendor:/var/www/html/vendor:delegated
   - ../app/frontend/node_modules:/app/frontend/node_modules:delegated
   ```
-  Trade-offs:
-  - Host bind mounts for packages can cause issues when your host OS differs from the runtime (e.g., native modules compiled on Linux vs. macOS), or when permissions differ.
-  - Named volumes are isolated to the container runtime, reducing mismatch risk.
+- If you prefer isolated installs, replace those entries with named volumes (see the commented example inside the compose file) and run `composer install`/`npm install` inside the container once to populate them.
 
 Rebuild policy checklist
 - Rebuild (full image) when:

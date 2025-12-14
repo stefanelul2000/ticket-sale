@@ -3,6 +3,7 @@
 ## Core Shell
 - **`src/router.tsx`**: Declares the route tree with `createBrowserRouter`, wrapping protected sections with `RequireAuth`.
 - **`src/ui/App.tsx`**: Hosts the `<RouterProvider />`.
+- **`src/ui/pages/SetupPage.tsx`**: First-run wizard rendered when `/setup/status` indicates provisioning is required (database test, admin account, optional SMTP, branding colors, and logo upload).
 - **`src/layouts/AppLayout.tsx`**: Sidebar + topbar shell for authenticated routes, rendering content via `<Outlet />`.
 - **`src/layouts/AuthLayout.tsx`**: Centered card used for login/register flows.
 

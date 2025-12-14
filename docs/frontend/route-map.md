@@ -23,7 +23,7 @@ This document maps backend resources (derived from `app/backend/routes/api.php`)
 
 | Backend Domain | API Endpoints | Frontend Route(s) | Purpose |
 | --- | --- | --- | --- |
-| Setup (`SetupController`) | `/setup/*` | `/setup`, `/welcome` | Initial configuration wizard and pre-setup welcome screen. |
+| Setup (`SetupController`) | `/setup/*` | Inline wizard rendered from `App.tsx` (no explicit route) | Multi-step provisioning flow (DB test → admin creation → optional email → branding/logo) shown automatically when `/setup/status` reports `needsSetup`. The wizard restarts from Step 1 on refresh to avoid persisting secrets. |
 | Branding (`BrandingController`) | `GET/POST /branding` | `/admin/branding` | Admin-only screen to edit global colors/logo. |
 | Authentication (`Auth* controllers`) | `/login`, `/register`, `/forgot-password`, `/reset-password`, `/verify-email/*`, `/logout` | `/login`, `/register`, `/auth/forgot-password`, `/auth/reset-password`, `/auth/verify-email` | Public auth flows. |
 | Profile (`/me`) | `/me` | `/me` | Display the authenticated user's profile and impersonation indicators. |

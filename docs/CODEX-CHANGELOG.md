@@ -1,5 +1,17 @@
 # Codex Changelog
 
+## 2025-12-14 - 18:45 — Setup gate restored
+- Added a frontend setup gate that calls `/setup/status` before rendering the router. When the API reports `needsSetup`, the SPA now renders a four-step wizard (DB connection test, admin creation, optional email, branding colors + logo upload) before unlocking the authenticated app.
+- The wizard now stays on a completion screen after provisioning (no automatic redirect) so users can review success details and click “Enter the application” when ready.
+- For security, we no longer persist any credentials in `localStorage`—only the wizard step was briefly stored, but now workflows restart from Step 1 after a refresh so passwords and SMTP secrets are never written to disk. The “setup disabled” banner was removed so the wizard always displays when DB provisioning is required.
+- Created `SetupPage.tsx` and wired it through `App.tsx`, with error handling for DB connectivity issues so empty databases immediately show the provisioning UI instead of falling back to the login screen.
+- Extended `SetupController@create` to accept optional branding colors and persist them in `settings`, and Step 4 now supports uploading a logo via `/setup/logo` once provisioning succeeds.
+- Improved UX: Step 2 now displays password requirements and mismatch hints, and API validation errors route users back to the relevant step (SMTP/branding). Logo uploads that require authentication now show a friendly notice reminding admins they can upload later from Admin → Branding.
+
+## 2025-12-14 - 18:15 — Dev compose vendor mounts
+- Updated `docker/docker-compose.override.yml` to bind-mount `app/backend/vendor` and `app/frontend/node_modules` directly from the host, preventing empty named volumes from masking Composer/NPM installs and ensuring Laravel boots after a clean DB reset.
+- Refreshed `docker/README.dev.md` to describe the new default and document how to switch back to named volumes if desired.
+
 ## 2025-12-14 - 18:00 — Native s6-rc services
 - Migrated from legacy `/etc/cont-init.d` + `/etc/services.d` scripts to first-class s6-rc packages under `docker/rootfs/etc/s6-overlay/s6-rc.d`. Oneshots (`env-setup`, `laravel-bootstrap`) now handle UID remapping and Laravel provisioning before longruns (`php-fpm`, `nginx`) start.
 - Updated the Dockerfile to mark `run`/`up` scripts executable automatically and documented the new supervision flow across the knowledge base + infrastructure docs so operators know the bundle structure.

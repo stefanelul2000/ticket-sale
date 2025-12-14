@@ -11,9 +11,9 @@ services:
       # Source code bind mounts keep development fast (host -> container)
       - ../app/backend:/var/www/html:delegated
       - ../app/frontend:/app/frontend:delegated
-      # Persist dependency installs to speed restarts. You can switch these to host-bind mounts if you prefer.
-      - backend_vendor:/var/www/html/vendor
-      - frontend_node_modules:/app/frontend/node_modules
+      # Keep vendor + node_modules in sync with the host repo
+      - ../app/backend/vendor:/var/www/html/vendor:delegated
+      - ../app/frontend/node_modules:/app/frontend/node_modules:delegated
       # Local storage and config mounts for dev convenience
       - ./local-storage:/var/www/html/storage
       - ./local-config:/config
@@ -41,6 +41,4 @@ services:
     ports:
       - "8081:80"
 
-volumes:
-  backend_vendor: {}
-  frontend_node_modules: {}
+volumes: {}

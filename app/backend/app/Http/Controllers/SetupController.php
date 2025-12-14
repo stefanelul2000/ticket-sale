@@ -52,11 +52,14 @@ class SetupController extends Controller
             throw new AccessDeniedHttpException('Setup already completed.');
         }
 
+        $dbRequired = $this->isSetupEnabled();
+        $dbRules = $dbRequired ? ['required', 'string'] : ['nullable', 'string'];
+
         $data = $request->validate([
-            'db_host' => ['required', 'string'],
-            'db_name' => ['required', 'string'],
-            'db_user' => ['required', 'string'],
-            'db_password' => ['required', 'string'],
+            'db_host' => $dbRules,
+            'db_name' => $dbRules,
+            'db_user' => $dbRules,
+            'db_password' => $dbRules,
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
             'username' => ['required', 'string', 'max:255'],
@@ -68,9 +71,18 @@ class SetupController extends Controller
             'mail_password' => ['nullable', 'string'],
             'mail_from_address' => ['nullable', 'email'],
             'mail_from_name' => ['nullable', 'string'],
+            'branding_primary' => ['nullable', 'string'],
+            'branding_secondary' => ['nullable', 'string'],
+            'branding_background' => ['nullable', 'string'],
         ]);
 
         $config = config('database.connections.mysql');
+        if (! $dbRequired) {
+            $data['db_host'] = $config['host'] ?? 'localhost';
+            $data['db_name'] = $config['database'] ?? 'ticket_sale';
+            $data['db_user'] = $config['username'] ?? 'root';
+            $data['db_password'] = $config['password'] ?? '';
+        }
         $config['host'] = $data['db_host'];
         $config['database'] = $data['db_name'];
         $config['username'] = $data['db_user'];
@@ -164,6 +176,21 @@ class SetupController extends Controller
             'MAIL_FROM_NAME' => $data['mail_from_name'] ?? $data['name'],
             'SETUP_ENABLED' => 'false',
         ]);
+
+        $brandingInput = [
+            'primary' => $data['branding_primary'] ?? null,
+            'secondary' => $data['branding_secondary'] ?? null,
+            'background' => $data['branding_background'] ?? null,
+        ];
+        if (array_filter($brandingInput)) {
+            $existing = Setting::where('key', 'branding')->first()?->value ?? [];
+            $payload = [
+                'primary' => $brandingInput['primary'] ?? ($existing['primary'] ?? '#2563eb'),
+                'secondary' => $brandingInput['secondary'] ?? ($existing['secondary'] ?? '#f472b6'),
+                'background' => $brandingInput['background'] ?? ($existing['background'] ?? '#0f172a'),
+            ];
+            Setting::updateOrCreate(['key' => 'branding'], ['value' => $payload]);
+        }
 
         return response()->json(['created' => true, 'user' => $user]);
     }

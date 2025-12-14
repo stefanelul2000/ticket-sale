@@ -20,6 +20,7 @@ Ticket Sale is a monorepo that contains:
 ## Frontend Architecture
 
 - Entry point: `src/main.tsx` renders the React tree and loads Tailwind-enhanced global styles.
+- `App.tsx` now runs a setup gate by calling `/setup/status`. If the backend reports `needsSetup`, it renders the multi-step `SetupPage` (DB test + admin user + email + branding with logo upload). We no longer persist any credentials; refreshing the page restarts the wizard from Step 1 to keep secrets in memory only.
 - Routing: `src/router.tsx` uses `createBrowserRouter` with guarded routes (`RequireAuth`) plus two layouts: `AppLayout` (sidebar/topbar shell) and `AuthLayout` (centered login/register). This replaces the legacy `setView` approach. Core business pages (`DashboardPage`, `EventsIndexPage`, `EventEditorPage`, `AdminUsersPage`, `AdminRolesPage`) now render via Tailwind-first components.
 - Shared UI primitives live in `src/ui/components/ui/` (`Button`, `Card`, `Input`, `Spinner`), providing the Tailwind foundations for the rewritten screens.
 - Styling: Tailwind, PostCSS, and Autoprefixer are installed. `public/config.js` seeds `window.__APP_CONFIG__` so the `/config.js` runtime script resolves during builds.

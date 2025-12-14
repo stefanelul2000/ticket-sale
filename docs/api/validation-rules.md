@@ -6,7 +6,7 @@
 - **Password reset routes** enforce Laravel's default email + token validation.
 
 ## Setup & Branding
-- **`POST /setup`**: requires `database` credentials, admin user info, and mail settings; the request enforces presence of host, port, database, username, password, admin name, username, and password (see `SetupController@create`).
+- **`POST /setup`**: requires database credentials plus admin name/email/username/password (confirmed). Optional fields: SMTP mailer (`mail_mailer`, `mail_host`, `mail_port`, `mail_username`, `mail_password`, `mail_from_address`, `mail_from_name`) and branding colors (`branding_primary`, `branding_secondary`, `branding_background`). The action tests DB connectivity, migrates, seeds roles/permissions, creates the admin, writes `.env`, and stores branding defaults when provided.
 - **`POST /setup/logo`**: multipart upload restricted to image mime types up to 2 MB.
 - **`POST /branding`**: `primary`, `secondary`, and `background` must be valid CSS colors; `logo` accept SVG/PNG/JPG up to 1 MB.
 
