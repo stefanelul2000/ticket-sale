@@ -1,5 +1,20 @@
 # Codex Changelog
 
+## 2025-12-14 - 18:00 — Native s6-rc services
+- Migrated from legacy `/etc/cont-init.d` + `/etc/services.d` scripts to first-class s6-rc packages under `docker/rootfs/etc/s6-overlay/s6-rc.d`. Oneshots (`env-setup`, `laravel-bootstrap`) now handle UID remapping and Laravel provisioning before longruns (`php-fpm`, `nginx`) start.
+- Updated the Dockerfile to mark `run`/`up` scripts executable automatically and documented the new supervision flow across the knowledge base + infrastructure docs so operators know the bundle structure.
+- Ensured `/var/log/nginx`, `/var/log/php82`, and `/var/lib/nginx/logs` are created during env setup so the host-mounted log directory is ready before services start, eliminating the previous missing-file alerts.
+
+## 2025-12-14 - 17:30 — Docker healthchecks & host log mount
+- Added healthchecks for the `app`, `db`, and `redis` services in `docker/docker-compose.yml` so Compose waits for each dependency (curling `/health`, `mysqladmin ping`, `redis-cli ping`) before marking containers healthy.
+- Bound `/var/log` to a host path (plus `docker/local-logs` in the override) and reverted nginx logs to file targets so on-host operators can tail access/error logs without `docker logs`.
+- Clarified the cont-init ownership optimizer in the infrastructure docs to explain why `/var/www` is only re-chowned when necessary, and noted the new log mount in both Docker + Nginx documentation.
+
+## 2025-12-14 - 17:10 — S6-overlay production base
+- Rebuilt `docker/Dockerfile` on Alpine 3.21 with PHP 8.2 packages, s6-overlay v3, and supervised nginx/php-fpm services so the container now honors `PUID`/`PGID`/`TZ` and runs `/init`.
+- Added `docker/rootfs` cont-init scripts for timezone/user remapping plus Laravel bootstrap and service definitions under `etc/services.d/`.
+- Updated the nginx fastcgi target, entrypoint wiring, and docs (knowledge base + infrastructure) to describe the new supervision model and runtime env knobs.
+
 ## 2025-12-14 - 15:45 — Event summaries for ticket ledger access
 - Added `/events/summary` (role ≥2) to provide lightweight event lists without exposing full event management data.
 - Updated the Tickets page + API client to call the summary endpoint so Check-in roles can load the ledger dropdown without 403 errors.

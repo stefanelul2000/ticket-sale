@@ -150,7 +150,10 @@ fi
 echo "Final runtime config.js contents:"
 cat /var/www/html/public/config.js || echo "config.js not readable"
 
+if [ "${INIT_ONLY:-false}" = "true" ]; then
+  exit 0
+fi
+
 # Start services
 php-fpm -D
 exec nginx -g "daemon off;"
-

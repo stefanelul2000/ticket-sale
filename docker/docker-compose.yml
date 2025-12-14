@@ -5,6 +5,9 @@ services:
     ports:
       - "8080:80"
     environment:
+      PUID: 1000
+      PGID: 1000
+      TZ: UTC
       APP_ENV: production
       APP_DEBUG: "false"
       CACHE_DRIVER: redis
@@ -22,6 +25,13 @@ services:
     volumes:
       - /host/path/ticket-sale/storage:/var/www/html/storage
       - /host/path/ticket-sale/config:/config
+      - /host/path/ticket-sale/logs:/var/log
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   db:
     container_name: ticket-sale-db
@@ -35,12 +45,24 @@ services:
       - "3306:3306"
     volumes:
       - db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   redis:
     container_name: ticket-sale-redis
     image: redis:7-alpine
     ports:
       - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
 
 volumes:
   db-data:

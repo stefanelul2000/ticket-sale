@@ -17,10 +17,12 @@ services:
       # Local storage and config mounts for dev convenience
       - ./local-storage:/var/www/html/storage
       - ./local-config:/config
+      - ./local-logs:/var/log
       # Alternative (host bind mounts) for vendor & node_modules -- uncomment to use host copies:
       # - ../app/backend/vendor:/var/www/html/vendor:delegated
       # - ../app/frontend/node_modules:/app/frontend/node_modules:delegated
     environment:
+      TZ: Europe/Bucharest
       APP_ENV: local
       APP_DEBUG: "true"
       VITE_API_URL: "http://localhost:8080/api"

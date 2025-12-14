@@ -1,75 +1,107 @@
 FROM node:20-alpine AS frontend
 WORKDIR /app
 
-# Install frontend dependencies
 COPY app/frontend/package*.json ./frontend/
 RUN cd frontend && npm ci
-
-# Ensure target public path exists for Vite outDir ../backend/public
-RUN mkdir -p /app/backend/public
-
-# Copy full frontend source
 COPY app/frontend ./frontend
+RUN cd frontend && BUILD_TO_BACKEND=true npm run build
 
-# Build frontend
-RUN cd frontend && npm run build
+FROM alpine:3.21
 
-# ------------------------------
-# PHP + NGINX + Runtime Config Stage
-# ------------------------------
-FROM php:8.3-fpm-alpine
+ARG S6_VERSION=3.2.1.0
+ARG APP_URL=http://localhost:8080
 
-RUN apk add --no-cache \
-    bash git unzip icu-dev oniguruma-dev libpng-dev libjpeg-turbo-dev libwebp-dev freetype-dev \
-    autoconf make gcc g++ nginx \
-    acl \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
-    && docker-php-ext-install pdo_mysql gd intl \
-    && pecl install redis \
-    && docker-php-ext-enable redis \
-    && apk del autoconf make gcc g++ \
-    && rm -rf /var/cache/apk/*
+ENV PUID=1000 \
+    PGID=1000 \
+    TZ=UTC \
+    APP_URL=${APP_URL}
 
-WORKDIR /var/www/html
+WORKDIR /var/www
 
-# Copy composer.json and composer.lock for dependency installation
+RUN set -eux; \
+    apk add --no-cache \
+      bash \
+      curl \
+      git \
+      nginx \
+      shadow \
+      tzdata \
+      ca-certificates \
+      php82 \
+      php82-ctype \
+      php82-curl \
+      php82-dom \
+      php82-fpm \
+      php82-fileinfo \
+      php82-iconv \
+      php82-gd \
+      php82-mbstring \
+      php82-opcache \
+      php82-openssl \
+      php82-phar \
+      php82-pdo \
+      php82-pdo_mysql \
+      php82-pecl-redis \
+      php82-session \
+      php82-simplexml \
+      php82-tokenizer \
+      php82-xml \
+      php82-xmlwriter \
+      php82-zip \
+      unzip \
+      icu-data-full \
+      icu-libs && \
+    ln -sf /usr/bin/php82 /usr/bin/php && \
+    if ! getent group www-data > /dev/null; then addgroup -S www-data; fi && \
+    if ! getent passwd www-data > /dev/null; then adduser -S -D -H -G www-data www-data; fi && \
+    mkdir -p /run/php
+
+ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_VERSION}/s6-overlay-noarch.tar.xz /tmp/
+ADD https://github.com/just-containers/s6-overlay/releases/download/v${S6_VERSION}/s6-overlay-x86_64.tar.xz /tmp/
+
+RUN set -eux; \
+    tar -C / -Jxpf /tmp/s6-overlay-noarch.tar.xz; \
+    tar -C / -Jxpf /tmp/s6-overlay-x86_64.tar.xz; \
+    rm /tmp/s6-overlay-*.tar.xz
+
+COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
+
 COPY app/backend/composer.json ./composer.json
 COPY app/backend/composer.lock ./composer.lock
+RUN set -eux; \
+    composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
 
-# Install Composer and backend dependencies
-COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
-RUN composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader --no-scripts
-
-# Copy the rest of the backend (Laravel) code
 COPY app/backend/ ./
-
-# Copy built frontend assets
 COPY --from=frontend /app/backend/public ./public
-
-# Restore Laravel front controller
 COPY app/backend/public/index.php ./public/index.php
+COPY docker/runtime-config.template.js ./public/config.js
+RUN set -eux; \
+    mkdir -p storage/framework/sessions storage/framework/cache/data storage/framework/views bootstrap/cache
 
-# Nginx config
-RUN mkdir -p /run/nginx
+RUN set -eux; \
+    sed -i 's/^user = .*/user = www-data/' /etc/php82/php-fpm.d/www.conf; \
+    sed -i 's/^group = .*/group = www-data/' /etc/php82/php-fpm.d/www.conf; \
+    sed -i 's|^listen = .*|listen = /run/php-fpm.sock|' /etc/php82/php-fpm.d/www.conf; \
+    sed -i 's/^;*listen.owner = .*/listen.owner = www-data/' /etc/php82/php-fpm.d/www.conf; \
+    sed -i 's/^;*listen.group = .*/listen.group = nginx/' /etc/php82/php-fpm.d/www.conf; \
+    sed -i 's/^;*listen.mode = .*/listen.mode = 0660/' /etc/php82/php-fpm.d/www.conf; \
+    mkdir -p /var/log/nginx /run/nginx; \
+    ln -sf /var/www /var/www/html
+
 COPY docker/nginx.conf.main /etc/nginx/nginx.conf
 COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Copy docker-specific env example into the webroot so the entrypoint finds it
-COPY docker/.env.example /var/www/html/.env.example
+COPY docker/entrypoint.sh /docker/entrypoint.sh
+RUN chmod +x /docker/entrypoint.sh
 
-# Entrypoint
-COPY docker/entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+COPY docker/rootfs /
 
-# Always generate swagger at build time, unless explicitly disabled.
-# Default APP_URL can be provided at build time using --build-arg APP_URL
-ARG APP_URL=http://localhost:8080
-ENV APP_URL=${APP_URL}
-# Always generate swagger during image build to ensure docs are present
-RUN echo "Generating L5 Swagger JSON at build time (APP_URL=${APP_URL})"; \
-        php artisan l5-swagger:generate || true; \
-        chown -R www-data:www-data /var/www/html/storage/api-docs || true;
+RUN set -eux; \
+    find /etc/s6-overlay -type f \( -name run -o -name up \) -exec chmod +x {} +; \
+    chmod +x /etc/s6-overlay/scripts/*.sh; \
+    php artisan l5-swagger:generate || true; \
+    chown -R www-data:www-data /var/www
 
 EXPOSE 80
 
-CMD ["/entrypoint.sh"]
+ENTRYPOINT ["/init"]

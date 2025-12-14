@@ -27,6 +27,7 @@ Ticket Sale is a monorepo that contains:
 
 ## Infrastructure Notes
 
+- Docker builds now target Alpine 3.21 with PHP 8.2 and s6-overlay v3, using native s6-rc packages (`docker/rootfs/etc/s6-overlay/s6-rc.d`). Oneshots handle env/permission setup and the Laravel bootstrap (calling `docker/entrypoint.sh` with `INIT_ONLY=true`) before the longrun services (`php-fpm`, `nginx`) start.
 - Vite builds write directly into `app/backend/public` (`vite.config.ts`). Docker images copy this directory during build.
 - Use `BUILD_TO_BACKEND=true npm run build` when you want Vite to write directly into `app/backend/public`; default builds now target `app/frontend/dist` to avoid permission issues in local dev. CI/container builds should set that env var.
 - `docker/runtime-config.template.js` is templated into `public/config.js` so the SPA reads the API base URL at runtime (`window.__APP_CONFIG__.API_URL`).

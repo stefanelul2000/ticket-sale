@@ -16,6 +16,8 @@ docker compose up -d
 - API: http://localhost:8080/api
 - Containers: `ticket-sale-app` (nginx+php-fpm), `ticket-sale-db` (mysql), `ticket-sale-redis` (redis).
 - On first start, migrates/seeds once; thereafter skipped (uses `/config/.provisioned`).
+- Runtime env knobs: `PUID`/`PGID` (default `1000`) remap `www-data` inside the container; `TZ` sets `/etc/localtime`.
+- Logs: nginx/PHP/system logs write to `/var/log`, which is bind-mounted to your host path (`/host/path/ticket-sale/logs` in the stock compose). Tail files there or keep using `docker compose logs`.
 
 ## Setup flow (first run)
 1) Open the SPA; setup wizard appears if no admin exists.
@@ -82,7 +84,7 @@ See `docker/README.dev.md` for more detail on mounts, named volumes vs host bind
 3) Complete setup (DB creds, admin user, optional SMTP/branding). The container seeds base roles/permissions automatically and runs migrations on start.
 4) Branding/settings are shared for all users and stored in the DB.
 
-> Note: The provided `docker-compose.yml` uses placeholder host bind paths for `/var/www/html/storage` and `/config`. Replace `/host/path/ticket-sale/storage` and `/host/path/ticket-sale/config` with real paths on your host before deploying.
+> Note: The provided `docker-compose.yml` uses placeholder host bind paths for `/var/www/html/storage`, `/config`, and `/var/log`. Replace `/host/path/ticket-sale/{storage,config,logs}` with real paths on your host before deploying.
 
 ## phpMyAdmin (optional, manual run)
 ```bash
