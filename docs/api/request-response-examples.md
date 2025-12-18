@@ -92,3 +92,33 @@ Response `200`
 }
 ```
 
+## Ticket Activity
+
+### `GET /ticket-activity`
+Response `200`
+```json
+[
+  {
+    "id": 44,
+    "ticket_code": "3_004",
+    "action": "checkin",
+    "status": "Checked in",
+    "success": true,
+    "name": "Jordan Buyer",
+    "created_at": "2025-12-14T19:47:00Z",
+    "user": {
+      "id": 2,
+      "name": "Door Lead",
+      "username": "doorlead"
+    }
+  }
+]
+```
+
+### `DELETE /ticket-activity`
+Response `200`
+```json
+{
+  "cleared": true
+}
+```

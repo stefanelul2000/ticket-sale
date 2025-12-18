@@ -41,6 +41,8 @@ Source: `app/frontend/src/lib/api.ts`. Every helper returns `Promise<T>` after u
 | `api.createTicketType(payload)` | POST | `/ticket-types` | Create ticket type. |
 | `api.updateTicketType(id, payload)` | PATCH | `/ticket-types/{id}` | Update ticket type. |
 | `api.deleteTicketType(id)` | DELETE | `/ticket-types/{id}` | Delete ticket type. |
+| `api.ticketActivity(limit?)` | GET | `/ticket-activity` | Shared verify/check-in/sell feed (defaults to 50 entries). |
+| `api.clearTicketActivity()` | DELETE | `/ticket-activity` | Clears the shared ticket activity feed for everyone. |
 | `api.impersonate(role_id)` | POST | `/impersonate` | Start impersonation. |
 | `api.stopImpersonate()` | DELETE | `/impersonate` | Stop impersonation. |
 

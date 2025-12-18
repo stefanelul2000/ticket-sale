@@ -1,5 +1,14 @@
 # Codex Changelog
 
+## 2025-12-14 - 19:50 — Shared ticket activity feed
+- Added `ticket_activity_logs` plus `TicketActivityController` so verify/check-in/sell actions write to a global feed exposed via `GET/DELETE /ticket-activity` for role ≥2 operators.
+- Ticket workflows now log success/failure directly from the API, and the Dashboard polls/clears the shared log so every user sees the same history until someone explicitly clears it.
+- Updated frontend API client + dashboard UI, plus docs (knowledge base, API references) to capture the new endpoints and persistence model.
+
+## 2025-12-14 - 19:05 — Auto check-in input handles Enter
+- Wired the dashboard's ticket code field with global Enter/Numpad Enter listeners and newline trimming so hardware scanners immediately dispatch Verify vs. Check-in based on auto mode without extra clicks, and the input now clears after submission so the next scan is ready instantly.
+- File: `app/frontend/src/ui/pages/DashboardPage.tsx`.
+
 ## 2025-12-14 - 18:45 — Setup gate restored
 - Added a frontend setup gate that calls `/setup/status` before rendering the router. When the API reports `needsSetup`, the SPA now renders a four-step wizard (DB connection test, admin creation, optional email, branding colors + logo upload) before unlocking the authenticated app.
 - The wizard now stays on a completion screen after provisioning (no automatic redirect) so users can review success details and click “Enter the application” when ready.

@@ -64,6 +64,9 @@ export const api = {
   createTicketType: (payload: any) => client.post('/ticket-types', payload).then((r) => r.data),
   updateTicketType: (id: number, payload: any) => client.patch(`/ticket-types/${id}`, payload).then((r) => r.data),
   deleteTicketType: (id: number) => client.delete(`/ticket-types/${id}`).then((r) => r.data),
+  ticketActivity: (limit?: number) =>
+    client.get('/ticket-activity', { params: limit ? { limit } : undefined }).then((r) => r.data),
+  clearTicketActivity: () => client.delete('/ticket-activity').then((r) => r.data),
   impersonate: (role_id: number) => client.post('/impersonate', { role_id }).then((r) => r.data),
   stopImpersonate: () => client.delete('/impersonate').then((r) => r.data),
 };

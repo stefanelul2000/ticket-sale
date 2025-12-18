@@ -16,6 +16,7 @@ Ticket Sale is a monorepo that contains:
 - Health, branding, and setup routes are public; everything else requires session auth.
 - Request validation is handled via explicit `FormRequest` classes (e.g., `Auth\LoginRequest`) or inline `$request->validate()` calls.
 - Local bootstrap: after `docker compose up`, run `docker compose exec app php artisan migrate --seed` (or `php artisan migrate --seed` in a host PHP environment) to create the `users` table and seed admin roles before hitting `/api/me`; otherwise MySQL emits `SQLSTATE[42S02]` because the schema is missing.
+- Ticket operations (verify, check-in, sell) now log into `ticket_activity_logs`, and the feed is exposed via `GET /ticket-activity` (role ≥2) so every operator sees the same history until it is explicitly cleared through `DELETE /ticket-activity`.
 
 ## Frontend Architecture
 
@@ -25,6 +26,7 @@ Ticket Sale is a monorepo that contains:
 - Shared UI primitives live in `src/ui/components/ui/` (`Button`, `Card`, `Input`, `Spinner`), providing the Tailwind foundations for the rewritten screens.
 - Styling: Tailwind, PostCSS, and Autoprefixer are installed. `public/config.js` seeds `window.__APP_CONFIG__` so the `/config.js` runtime script resolves during builds.
 - Legacy view infrastructure (`src/ui/views`, `src/ui/components/Layout.tsx`, `ThemeControls.tsx`, `styles.ts`) has been removed entirely. All routed experiences now live under `src/ui/pages`, ensuring every navigation event maps to an explicit URL.
+- The Dashboard now polls `/ticket-activity` every few seconds and exposes a “Clear history” control so the shared log persists across sessions/devices until someone intentionally resets it.
 
 ## Infrastructure Notes
 

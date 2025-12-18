@@ -33,6 +33,7 @@ This document maps backend resources (derived from `app/backend/routes/api.php`)
 | Ticket Types (`TicketTypeController`) | `/ticket-types`, `/ticket-types/{id}` | `/events` (Ticket Types tab) | Ticket type CRUD lives inside the Events page rather than its own route. |
 | Tickets (`TicketController`) | `/tickets`, `/tickets/{ticketNumber}/verify`, `/tickets/{ticketNumber}/checkin`, `/tickets/{ticketNumber}/sell`, `/tickets/generate`, `/tickets/{ticketNumber}/refund`, `/events/{event}/tickets`, `/stats` | `/tickets` (placeholder), `/dashboard` (verify/check-in/sell widgets) | Ticket lifecycle management; dashboard still handles verify/check-in while `/tickets` will eventually expose dedicated tools. |
 | Dashboard (`TicketController@stats`) | `/stats` | `/dashboard` | Business insights and at-a-glance performance metrics. |
+| Ticket activity (`TicketActivityController`) | `/ticket-activity` | `/dashboard` (Activity history card) | Shared verify/check-in/sell feed that persists until someone clears it. |
 | Health | `/health` | `/health` | System heartbeat page. |
 
 ## Navigation Groups

@@ -8,6 +8,7 @@ use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketTypeController;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\BrandingController;
+use App\Http\Controllers\TicketActivityController;
 use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -100,6 +101,8 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
         Route::get('/tickets', [TicketController::class, 'index']);
         Route::get('/tickets/{ticketNumber}/verify', [TicketController::class, 'verify']);
         Route::post('/tickets/{ticketNumber}/checkin', [TicketController::class, 'checkin']);
+        Route::get('/ticket-activity', [TicketActivityController::class, 'index']);
+        Route::delete('/ticket-activity', [TicketActivityController::class, 'destroy']);
     });
 
     Route::middleware('role:3')->group(function () {

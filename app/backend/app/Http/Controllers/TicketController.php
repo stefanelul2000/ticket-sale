@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Event;
 use App\Models\Ticket;
 use App\Models\TicketType;
+use App\Models\TicketActivityLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -112,10 +113,12 @@ class TicketController extends Controller
 
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
+            $this->recordActivity($request, 'sell', $ticketCode, 'Ticket not found.', false);
             throw new NotFoundHttpException('Ticket not found');
         }
 
         if (! is_null($ticket->sold_at)) {
+            $this->recordActivity($request, 'sell', $ticket->ticket_code, 'Ticket already sold.', false, $ticket->name);
             return response()->json(['message' => 'Ticket already sold.'], 409);
         }
 
@@ -123,6 +126,8 @@ class TicketController extends Controller
             'user_id' => $request->user()->id,
             'sold_at' => Carbon::now(),
         ]));
+
+        $this->recordActivity($request, 'sell', $ticket->ticket_code, 'Sold', true, $data['name'] ?? null);
 
         return response()->json($ticket);
     }
@@ -144,28 +149,42 @@ class TicketController extends Controller
         return response()->json(['refunded' => true]);
     }
 
-    public function checkin(string $ticketCode)
+    public function checkin(Request $request, string $ticketCode)
     {
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
+            $this->recordActivity($request, 'checkin', $ticketCode, 'Ticket not found.', false);
             throw new NotFoundHttpException('Ticket not found');
         }
 
         if ($ticket->checkin) {
+            $this->recordActivity($request, 'checkin', $ticket->ticket_code, 'Ticket already checked in.', false, $ticket->name);
             return response()->json(['message' => 'Ticket already checked in.'], 409);
         }
 
         $ticket->update(['checkin' => true]);
 
+        $this->recordActivity($request, 'checkin', $ticket->ticket_code, 'Checked in', true, $ticket->name);
+
         return response()->json(['checked_in' => true]);
     }
 
-    public function verify(string $ticketCode)
+    public function verify(Request $request, string $ticketCode)
     {
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
+            $this->recordActivity($request, 'verify', $ticketCode, 'Ticket not found.', false);
             throw new NotFoundHttpException('Ticket not found');
         }
+
+        $this->recordActivity(
+            $request,
+            'verify',
+            $ticket->ticket_code,
+            $ticket->checkin ? 'Already checked-in' : 'Valid',
+            true,
+            $ticket->name,
+        );
 
         return response()->json($ticket);
     }
@@ -188,5 +207,23 @@ class TicketController extends Controller
     private function findTicketByCode(string $input): ?Ticket
     {
         return Ticket::where('ticket_code', $input)->first();
+    }
+
+    private function recordActivity(Request $request, string $action, ?string $ticketCode, string $status, bool $success, ?string $name = null, array $context = []): void
+    {
+        $payload = [
+            'user_id' => $request->user()?->id,
+            'ticket_code' => $ticketCode,
+            'action' => $action,
+            'status' => $status,
+            'success' => $success,
+            'attendee_name' => $name,
+        ];
+
+        if (! empty($context)) {
+            $payload['context'] = $context;
+        }
+
+        TicketActivityLog::create($payload);
     }
 }

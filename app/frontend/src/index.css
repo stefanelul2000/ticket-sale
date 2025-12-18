@@ -333,3 +333,21 @@ a {
     grid-template-columns: 1fr !important;
   }
 }
+
+.activity-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #475569 transparent;
+}
+
+.activity-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.activity-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.activity-scroll::-webkit-scrollbar-thumb {
+  background-color: #475569;
+  border-radius: 9999px;
+}

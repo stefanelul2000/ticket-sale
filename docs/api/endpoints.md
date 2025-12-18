@@ -46,6 +46,8 @@ This document lists all available API endpoints, their methods, associated contr
 | GET | `/tickets` | `TicketController@index` | List all tickets. |
 | GET | `/tickets/{ticketNumber}/verify` | `TicketController@verify` | Verify ticket status. |
 | POST | `/tickets/{ticketNumber}/checkin` | `TicketController@checkin` | Check-in a ticket. |
+| GET | `/ticket-activity` | `TicketActivityController@index` | Shared ticket action feed. |
+| DELETE | `/ticket-activity` | `TicketActivityController@destroy` | Clear ticket activity feed. |
 | POST | `/tickets/{ticketNumber}/sell` | `TicketController@sell` | Sell a ticket. |
 | GET | `/stats` | `TicketController@stats` | Get ticket statistics. |
 | DELETE | `/impersonate` | `Closure` | Stop impersonation. |

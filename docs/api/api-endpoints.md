@@ -47,5 +47,7 @@ This canonical list mirrors the routes defined in `app/backend/routes/api.php`.
 | GET | `/tickets` | `TicketController@index` | List tickets. |
 | GET | `/tickets/{ticketNumber}/verify` | `TicketController@verify` | Verify ticket. |
 | POST | `/tickets/{ticketNumber}/checkin` | `TicketController@checkin` | Check in ticket. |
+| GET | `/ticket-activity` | `TicketActivityController@index` | Shared verify/check-in/sell feed (role ≥2). |
+| DELETE | `/ticket-activity` | `TicketActivityController@destroy` | Clears the shared ticket activity feed. |
 | POST | `/tickets/{ticketNumber}/sell` | `TicketController@sell` | Register a sale. |
 | GET | `/stats` | `TicketController@stats` | Ticket stats for dashboard. |
