@@ -78,7 +78,7 @@ return [
     |
     */
 
-    'locale' => env('APP_LOCALE', 'en'),
+    'locale' => env('APP_LOCALE', 'ro'),
 
     'fallback_locale' => env('APP_FALLBACK_LOCALE', 'en'),
 
@@ -133,6 +133,8 @@ return [
     | an admin exists. env_store_path: persisted copy of .env (container volume).
     */
     'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost')),
+
+    'registration_enabled' => filter_var(env('REGISTRATION_ENABLED', false), FILTER_VALIDATE_BOOL),
 
     'setup_enabled' => filter_var(env('SETUP_ENABLED', true), FILTER_VALIDATE_BOOL),
     'env_store_path' => env('ENV_STORE_PATH', '/config/app.env'),

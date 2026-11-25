@@ -1,53 +1,49 @@
 import { forwardRef } from 'react';
-import type { ButtonHTMLAttributes, CSSProperties } from 'react';
+import type { ButtonHTMLAttributes } from 'react';
 import clsx from 'clsx';
-import { useTheme } from '../../../state/useTheme';
-import { withAlpha, mixWithWhite } from '../../utils/colors';
+import { Spinner } from './Spinner';
 
-type ButtonVariant = 'primary' | 'ghost' | 'danger';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'success';
+type Size = 'sm' | 'md' | 'lg';
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: ButtonVariant;
+  variant?: Variant;
+  size?: Size;
+  loading?: boolean;
+};
+
+const variants: Record<Variant, string> = {
+  primary: 'bg-accent text-onaccent hover:bg-accentstrong border border-transparent',
+  secondary: 'bg-surface text-ink border border-linestrong hover:border-control hover:bg-surface2',
+  ghost: 'bg-transparent text-soft border border-transparent hover:bg-surface2 hover:text-ink',
+  danger: 'bg-surface text-danger border border-dangerline hover:bg-dangerbg',
+  success: 'bg-ok text-white border border-transparent hover:opacity-90',
+};
+
+const sizes: Record<Size, string> = {
+  sm: 'h-8 px-3 text-sm gap-1.5',
+  md: 'h-10 px-4 text-sm gap-2',
+  lg: 'h-12 px-5 text-base gap-2',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
-  { className, variant = 'primary', disabled, children, ...props },
+  { className, variant = 'primary', size = 'md', loading = false, disabled, children, type = 'button', ...props },
   ref,
 ) {
-  const { primary, secondary } = useTheme();
-  const baseClass = 'inline-flex items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 disabled:cursor-not-allowed disabled:opacity-50';
-  let variantClass = '';
-  let styleOverride: CSSProperties = {};
-
-  if (variant === 'primary') {
-    variantClass = 'text-white';
-    styleOverride = {
-      backgroundImage: `linear-gradient(135deg, ${primary}, ${secondary})`,
-      boxShadow: `0 10px 25px ${withAlpha(primary, 0.35)}`,
-    };
-  } else if (variant === 'ghost') {
-    variantClass = 'bg-transparent';
-    styleOverride = {
-      color: mixWithWhite(primary, 0.4),
-      border: `1px solid ${withAlpha(primary, 0.4)}`,
-    };
-  } else {
-    variantClass = 'bg-red-600 text-white hover:bg-red-500';
-  }
-
   return (
     <button
       ref={ref}
-      disabled={disabled}
+      type={type}
+      disabled={disabled || loading}
       className={clsx(
-        baseClass,
-        variant === 'danger' ? 'focus-visible:outline-red-400' : 'focus-visible:outline-blue-500',
-        variantClass,
+        'inline-flex select-none items-center justify-center whitespace-nowrap rounded font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50',
+        variants[variant],
+        sizes[size],
         className,
       )}
-      style={styleOverride}
       {...props}
     >
+      {loading && <Spinner size="sm" />}
       {children}
     </button>
   );

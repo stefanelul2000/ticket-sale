@@ -24,10 +24,11 @@ class AuthenticatedSessionController extends Controller
             $request->session()->invalidate();
             $request->session()->regenerateToken();
 
-            return response()->json(['message' => 'Your account is not active. Ask an administrator to enable it.'], 403);
+            return response()->json(['message' => __('Your account is not active. Ask an administrator to enable it.')], 403);
         }
 
         $request->session()->regenerate();
+        $request->user()->forceFill(['last_login_at' => now()])->saveQuietly();
 
         return response()->noContent();
     }

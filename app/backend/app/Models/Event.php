@@ -39,20 +39,25 @@ class Event extends Model
 
     protected $fillable = [
         'name',
+        'description',
         'slug',
         'is_online',
+        'is_public',
         'venue',
         'city',
         'country',
         'starts_at',
         'ends_at',
         'capacity',
+        'donation_url',
+        'photos_url',
         'branding',
         'seo',
     ];
 
     protected $casts = [
         'is_online' => 'boolean',
+        'is_public' => 'boolean',
         'starts_at' => 'datetime',
         'ends_at' => 'datetime',
         'branding' => 'array',
@@ -67,5 +72,24 @@ class Event extends Model
     public function tickets()
     {
         return $this->hasMany(Ticket::class);
+    }
+
+    /**
+     * Fields shown on the public event page / ticket page (no internal data).
+     */
+    public function publicPayload(array $organization): array
+    {
+        return [
+            'slug' => $this->slug,
+            'name' => $this->name,
+            'description' => $this->description,
+            'starts_at' => $this->starts_at,
+            'ends_at' => $this->ends_at,
+            'venue' => $this->venue,
+            'city' => $this->city,
+            'is_public' => $this->is_public,
+            'donation_url' => $this->donation_url ?: ($organization['donation_url'] ?? null),
+            'photos_url' => $this->photos_url,
+        ];
     }
 }

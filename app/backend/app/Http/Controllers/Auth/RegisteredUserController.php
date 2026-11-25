@@ -17,6 +17,9 @@ class RegisteredUserController extends Controller
      */
     public function store(Request $request): Response
     {
+        // Staff accounts are created by admins; public sign-up is off unless explicitly enabled.
+        abort_unless((bool) config('app.registration_enabled'), 404);
+
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:' . User::class],

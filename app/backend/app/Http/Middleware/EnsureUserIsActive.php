@@ -19,7 +19,7 @@ class EnsureUserIsActive
                 $request->session()->regenerateToken();
             }
 
-            return response()->json(['message' => 'Your account is disabled.'], 401);
+            return response()->json(['message' => __('Your account is disabled.')], 401);
         }
 
         return $next($request);

@@ -16,11 +16,11 @@ class ForbidImpersonationTargets
         $target = $targetId ? Role::find($targetId) : null;
 
         if (! $user || $realRoleId < 5) {
-            abort(403, 'Not allowed to impersonate.');
+            abort(403, __('Not allowed to impersonate.'));
         }
 
         if (! $target || $target->id >= $realRoleId) {
-            abort(403, 'Cannot impersonate this role.');
+            abort(403, __('Cannot impersonate this role.'));
         }
 
         return $next($request);

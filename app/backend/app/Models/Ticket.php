@@ -17,16 +17,19 @@ class Ticket extends Model
         'ticket_code',
         'user_id',
         'name',
+        'guest_category',
         'sold_at',
         'checkin',
         'checked_in_at',
         'checked_in_by',
+        'is_walk_in',
     ];
 
     protected $casts = [
         'sold_at' => 'datetime',
         'checkin' => 'boolean',
         'checked_in_at' => 'datetime',
+        'is_walk_in' => 'boolean',
     ];
 
     public function seller()

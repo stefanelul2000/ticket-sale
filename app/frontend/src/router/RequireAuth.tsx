@@ -1,39 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../state/useAuth';
-import { Spinner } from '../ui/components/ui/Spinner';
+import { useAuth, useRoleId } from '../state/useAuth';
+import { Loading } from '../ui/components/ui/Misc';
 
-type Props = {
-  children: ReactNode;
-};
-
-export function RequireAuth({ children }: Props) {
-  const { user, fetchMe, loading } = useAuth();
+export function RequireAuth({ children }: { children: ReactNode }) {
+  const { user, checked, fetchMe } = useAuth();
   const location = useLocation();
-  const [checked, setChecked] = useState(false);
 
   useEffect(() => {
-    if (!user && !checked) {
-      fetchMe()
-        .catch(() => {})
-        .finally(() => setChecked(true));
-    } else if (user && !checked) {
-      setChecked(true);
-    }
-  }, [user, fetchMe, checked]);
+    if (!checked) fetchMe();
+  }, [checked, fetchMe]);
 
-  if (!checked || loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-slate-950">
-        <Spinner size="lg" />
-      </div>
-    );
-  }
+  if (!checked) return <div className="min-h-screen bg-bg"><Loading /></div>;
+  if (!user) return <Navigate to={`/login?next=${encodeURIComponent(location.pathname + location.search)}`} replace />;
+  return <>{children}</>;
+}
 
-  if (!user) {
-    return <Navigate to="/login" replace state={{ from: location }} />;
-  }
-
+/** Hide pages from roles that cannot use them (the API enforces it too). */
+export function RequireRole({ allow, children }: { allow: (role: number) => boolean; children: ReactNode }) {
+  const role = useRoleId();
+  if (!allow(role)) return <Navigate to="/" replace />;
   return <>{children}</>;
 }

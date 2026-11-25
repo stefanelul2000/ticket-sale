@@ -55,8 +55,23 @@ class AuthenticationTest extends TestCase
         $this->actingAs($user->fresh())->getJson('/api/me')->assertUnauthorized();
     }
 
-    public function test_registration_creates_inactive_seller(): void
+    public function test_public_registration_is_disabled_by_default(): void
     {
+        $this->postJson('/api/register', [
+            'name' => 'New Person',
+            'email' => 'new@example.com',
+            'username' => 'newperson',
+            'password' => 'Secret-Password-1',
+            'password_confirmation' => 'Secret-Password-1',
+        ])->assertNotFound();
+
+        $this->assertDatabaseMissing('users', ['username' => 'newperson']);
+    }
+
+    public function test_registration_creates_inactive_volunteer_when_enabled(): void
+    {
+        config(['app.registration_enabled' => true]);
+
         $this->postJson('/api/register', [
             'name' => 'New Person',
             'email' => 'new@example.com',
@@ -67,5 +82,13 @@ class AuthenticationTest extends TestCase
 
         $this->assertDatabaseHas('users', ['username' => 'newperson', 'role_id' => 3, 'active' => false]);
         $this->assertGuest();
+    }
+
+    public function test_login_records_last_login(): void
+    {
+        $user = $this->userWithRole(2);
+        $this->postJson('/api/login', ['username' => $user->username, 'password' => 'password'])->assertNoContent();
+
+        $this->assertNotNull($user->fresh()->last_login_at);
     }
 }

@@ -164,7 +164,7 @@ class TicketFlowTest extends TestCase
         $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/checkin");
 
         $this->actingAs($manager)->getJson('/api/stats?event_id='.$event->id)
-            ->assertExactJson(['total' => 4, 'sold' => 2, 'unsold' => 2, 'checked_in' => 1]);
+            ->assertExactJson(['total' => 4, 'sold' => 2, 'unsold' => 2, 'checked_in' => 1, 'walk_ins' => 0]);
     }
 
     public function test_event_with_sold_tickets_cannot_be_deleted(): void

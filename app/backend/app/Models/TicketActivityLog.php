@@ -11,6 +11,7 @@ class TicketActivityLog extends Model
 
     protected $fillable = [
         'user_id',
+        'event_id',
         'ticket_code',
         'action',
         'status',

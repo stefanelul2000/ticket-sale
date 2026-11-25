@@ -1,119 +1,97 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { AuthLayout } from '../../layouts/AuthLayout';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../state/useAuth';
+import { useT } from '../../i18n';
+import { errorMessage } from '../../lib/api';
+import { Button } from '../components/ui/Button';
+import { Input } from '../components/ui/Input';
+import { Logo } from '../components/ui/Misc';
+import { Preferences } from '../components/Preferences';
 
-const iconClasses = 'h-4 w-4 text-white/70';
-
-function AuthField({
-  label,
-  type = 'text',
-  value,
-  onChange,
-  autoComplete,
-}: {
-  label: string;
-  type?: string;
-  value: string;
-  onChange: (value: string) => void;
-  autoComplete?: string;
-}) {
-  return (
-    <label className="block text-sm text-white/70">
-      <span className="sr-only">{label}</span>
-      <div className="flex items-center gap-3 rounded-2xl border border-white/15 bg-white/10 px-4 py-3 shadow-inner shadow-black/20 focus-within:border-blue-300">
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className={iconClasses}
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-        >
-          {type === 'password' ? (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.4} d="M12 11c-1.657 0-3-1.343-3-3s1.343-3 3-3 3 1.343 3 3-1.343 3-3 3zM5 20a7 7 0 0114 0" />
-          ) : (
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.4} d="M5.121 17.804A4 4 0 017 16h10a4 4 0 011.879 1.804M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-          )}
-        </svg>
-        <input
-          className="flex-1 bg-transparent text-base text-white placeholder-white/50 outline-none"
-          type={type}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={label}
-          autoComplete={autoComplete}
-          required
-        />
-      </div>
-    </label>
-  );
-}
+/** Only same-app paths are allowed as redirect targets. */
+const safeNext = (value: string | null) => (value && value.startsWith('/') && !value.startsWith('//') ? value : '/');
 
 export function LoginPage() {
-  const { login, loading } = useAuth();
+  const t = useT();
+  const { login, loading, user, checked } = useAuth();
+  const [params] = useSearchParams();
   const navigate = useNavigate();
-  const location = useLocation();
-  const redirectTo = (location.state as any)?.from?.pathname ?? '/dashboard';
   const [form, setForm] = useState({ username: '', password: '', remember: true });
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (event: FormEvent) => {
-    event.preventDefault();
+  if (checked && user) return <Navigate to={safeNext(params.get('next'))} replace />;
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
     setError(null);
     try {
-      await login(form.username, form.password, form.remember);
-      navigate(redirectTo, { replace: true });
-    } catch {
-      setError('Invalid credentials.');
+      await login(form.username.trim(), form.password, form.remember);
+      navigate(safeNext(params.get('next')), { replace: true });
+    } catch (err) {
+      setError(errorMessage(err, t('auth.failed')));
     }
   };
 
   return (
-    <AuthLayout title="Welcome back" subtitle="Log in to continue managing your events">
-      <form className="space-y-5" onSubmit={handleSubmit}>
-        <AuthField
-          label="Username"
-          value={form.username}
-          onChange={(value) => setForm((prev) => ({ ...prev, username: value }))}
-          autoComplete="username"
-        />
-        <AuthField
-          label="Password"
-          type="password"
-          value={form.password}
-          onChange={(value) => setForm((prev) => ({ ...prev, password: value }))}
-          autoComplete="current-password"
-        />
-        <div className="flex items-center justify-between text-xs text-white/70">
-          <label className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={form.remember}
-              onChange={(e) => setForm((prev) => ({ ...prev, remember: e.target.checked }))}
-              className="h-4 w-4 rounded border-white/40 bg-transparent text-blue-400 focus:ring-blue-300"
-            />
-            Remember me
-          </label>
-          <button type="button" className="text-white/80 underline-offset-2 hover:underline">
-            Forgot password?
-          </button>
+    <div className="grid min-h-screen lg:grid-cols-2">
+      <div className="relative hidden flex-col justify-between overflow-hidden bg-navy p-10 text-white lg:flex">
+        <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-sky opacity-20 blur-3xl" />
+        <div className="absolute -bottom-32 -left-20 h-96 w-96 rounded-full bg-sky opacity-10 blur-3xl" />
+        <div className="relative flex items-center gap-3">
+          <img src="/brand/as-mark-192.png" alt="" className="h-11 w-11 rounded-full bg-white p-1" />
+          <span className="font-display text-xl font-bold">Atelier Săcelean</span>
         </div>
-        {error && <p className="text-sm text-red-300">{error}</p>}
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-[999px] bg-gradient-to-r from-blue-600 to-indigo-500 px-6 py-3 text-base font-semibold text-white shadow-lg shadow-blue-900/40 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {loading ? 'Signing in...' : 'Login'}
-        </button>
-      </form>
-      <p className="text-center text-sm text-white/80">
-        Don&apos;t have an account?{' '}
-        <Link to="/register" className="font-semibold text-white underline-offset-4 hover:underline">
-          Register
-        </Link>
-      </p>
-    </AuthLayout>
+        <div className="relative max-w-md">
+          <h1 className="font-display text-5xl font-bold leading-tight">{t('login.heroTitle')}</h1>
+          <p className="mt-4 text-lg text-white/80">{t('login.heroText')}</p>
+        </div>
+        <p className="relative text-sm text-white/60">{t('login.tagline')}</p>
+      </div>
+
+      <div className="flex flex-col bg-bg">
+        <div className="flex justify-end p-4">
+          <Preferences compact />
+        </div>
+        <div className="flex flex-1 items-center justify-center px-4 pb-16">
+          <div className="w-full max-w-sm">
+            <div className="mb-8 flex flex-col items-center text-center">
+              <Logo full size={112} className="mb-4" />
+              <h2 className="text-2xl font-bold">{t('login.title')}</h2>
+              <p className="mt-1 text-sm text-soft">{t('login.subtitle')}</p>
+            </div>
+            <form onSubmit={submit} className="space-y-4 rounded-xl border border-line bg-surface p-6 shadow-card">
+              <Input
+                label={t('field.username')}
+                name="username"
+                autoComplete="username"
+                autoCapitalize="none"
+                required
+                value={form.username}
+                onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+              />
+              <Input
+                label={t('field.password')}
+                name="password"
+                type="password"
+                autoComplete="current-password"
+                required
+                value={form.password}
+                onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              />
+              <label className="flex items-center gap-2 text-sm text-soft">
+                <input type="checkbox" checked={form.remember} onChange={(e) => setForm((f) => ({ ...f, remember: e.target.checked }))} className="h-4 w-4 accent-[var(--a-accent)]" />
+                {t('login.remember')}
+              </label>
+              {error && <p className="rounded bg-dangerbg px-3 py-2 text-sm font-semibold text-danger">{error}</p>}
+              <Button type="submit" size="lg" className="w-full" loading={loading}>
+                {t('auth.login')}
+              </Button>
+            </form>
+            <p className="mt-6 text-center text-xs text-soft">{t('login.help')}</p>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

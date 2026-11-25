@@ -1,52 +1,22 @@
 import { create } from 'zustand';
 
-type ThemeValues = {
-  primary: string;
-  secondary: string;
-  background: string;
-  logoUrl: string;
-};
+export type ThemeMode = 'light' | 'dark';
 
-type ThemeState = ThemeValues & {
-  setTheme: (t: Partial<ThemeValues>) => void;
-};
+const current = (): ThemeMode =>
+  document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
 
-export const themeDefaults: ThemeValues = {
-  primary: '#ff5c8d',
-  secondary: '#43d9ad',
-  background: '#0b0c10',
-  logoUrl: '',
-};
+type ThemeState = { mode: ThemeMode; toggle: () => void; setMode: (m: ThemeMode) => void };
 
-const loadPersisted = (): Partial<ThemeValues> => {
-  if (typeof localStorage === 'undefined') return {};
-  try {
-    const raw = localStorage.getItem('ts_theme');
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-};
-
-export const useTheme = create<ThemeState>((set) => ({
-  ...themeDefaults,
-  ...loadPersisted(),
-  setTheme: (t) =>
-    set((state) => {
-      const nextValues: ThemeValues = {
-        primary: state.primary,
-        secondary: state.secondary,
-        background: state.background,
-        logoUrl: state.logoUrl,
-        ...t,
-      };
-      if (typeof localStorage !== 'undefined') {
-        try {
-          localStorage.setItem('ts_theme', JSON.stringify(nextValues));
-        } catch {
-          // ignore
-        }
-      }
-      return { ...state, ...t };
-    }),
+export const useTheme = create<ThemeState>((set, get) => ({
+  mode: current(),
+  setMode: (mode) => {
+    document.documentElement.setAttribute('data-theme', mode);
+    try {
+      localStorage.setItem('ts_theme_mode', mode);
+    } catch {
+      /* ignore */
+    }
+    set({ mode });
+  },
+  toggle: () => get().setMode(get().mode === 'dark' ? 'light' : 'dark'),
 }));

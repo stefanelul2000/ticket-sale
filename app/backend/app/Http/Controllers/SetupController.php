@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Setting;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Database\Seeders\RoleSeeder;
@@ -12,7 +11,6 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -62,9 +60,6 @@ class SetupController extends Controller
             'mail_password' => ['nullable', 'string', 'max:255'],
             'mail_from_address' => ['nullable', 'email'],
             'mail_from_name' => ['nullable', 'string', 'max:255'],
-            'branding_primary' => ['nullable', 'string', 'regex:'.BrandingController::COLOR_REGEX],
-            'branding_secondary' => ['nullable', 'string', 'regex:'.BrandingController::COLOR_REGEX],
-            'branding_background' => ['nullable', 'string', 'regex:'.BrandingController::COLOR_REGEX],
         ]);
 
         $lock = Cache::lock('setup:create', 60);
@@ -151,15 +146,6 @@ class SetupController extends Controller
             }
             $this->writeEnv($env);
 
-            $brandingInput = array_filter([
-                'primary' => $data['branding_primary'] ?? null,
-                'secondary' => $data['branding_secondary'] ?? null,
-                'background' => $data['branding_background'] ?? null,
-            ]);
-            if ($brandingInput) {
-                BrandingController::merge($brandingInput);
-            }
-
             $this->logAdminAction($user->id, 'setup.completed', ['username' => $user->username]);
 
             // Sign the new owner in (SPA session) so the wizard can continue (e.g. logo upload).
@@ -225,42 +211,6 @@ class SetupController extends Controller
         }
 
         return response()->json(['ok' => true]);
-    }
-
-    public function uploadLogo(Request $request)
-    {
-        $user = $request->user();
-        $isAdmin = $user && (int) $user->role_id >= 5;
-
-        if (! $isAdmin) {
-            // Anonymous upload is only possible while setup is genuinely open.
-            $this->assertSetupOpen();
-        }
-
-        $request->validate([
-            'logo' => ['required', 'file', 'mimes:png,jpg,jpeg,webp,gif', 'max:2048'],
-        ]);
-
-        $file = $request->file('logo');
-        $extension = $file->guessExtension() ?: 'png';
-        $name = 'logo_'.Str::lower(Str::random(16)).'.'.$extension;
-        $path = $file->storeAs('logos', $name, ['disk' => 'public']);
-
-        // Relative URL: works behind any host/proxy.
-        $url = '/storage/'.ltrim($path, '/');
-
-        try {
-            @copy(Storage::disk('public')->path($path), public_path('favicon.png'));
-        } catch (\Throwable $e) {
-            // favicon is best effort
-        }
-
-        $branding = BrandingController::merge(['logoUrl' => $url]);
-        if ($user) {
-            $this->logAdminAction($user->id, 'branding.logo', ['url' => $url]);
-        }
-
-        return response()->json(['url' => $url, 'branding' => $branding], 201);
     }
 
     private function isSetupEnabled(): bool

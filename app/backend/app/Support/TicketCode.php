@@ -28,12 +28,18 @@ final class TicketCode
 
     /**
      * Normalise scanner / keyboard input to the stored form.
-     * Accepts lower case, missing or extra separators and surrounding whitespace.
+     * Accepts lower case, missing or extra separators, surrounding whitespace and the
+     * public ticket URL encoded in the QR code.
      * Input that does not look like a new-style code is returned trimmed (legacy codes).
      */
     public static function normalize(string $input): string
     {
         $trimmed = trim($input);
+
+        // QR codes on invitations carry the public URL (https://host/t/CODE): keep only the code.
+        if (preg_match('~/t/([A-Za-z0-9_-]{3,32})/?(?:[?#].*)?$~', $trimmed, $m)) {
+            $trimmed = $m[1];
+        }
         $compact = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $trimmed) ?? '');
 
         if (strlen($compact) === self::LENGTH && strspn($compact, self::ALPHABET) === self::LENGTH) {

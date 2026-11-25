@@ -1,20 +1,12 @@
-type SpinnerProps = {
-  size?: 'sm' | 'md' | 'lg';
-  className?: string;
-};
+import clsx from 'clsx';
 
-const sizeMap: Record<NonNullable<SpinnerProps['size']>, string> = {
-  sm: 'h-4 w-4 border-2',
-  md: 'h-6 w-6 border-2',
-  lg: 'h-10 w-10 border-4',
-};
-
-export function Spinner({ size = 'md', className }: SpinnerProps) {
+export function Spinner({ size = 'md', className }: { size?: 'sm' | 'md' | 'lg'; className?: string }) {
+  const dim = size === 'sm' ? 'h-4 w-4 border-2' : size === 'lg' ? 'h-9 w-9 border-[3px]' : 'h-6 w-6 border-2';
   return (
     <span
-      className={`inline-block animate-spin rounded-full border-current border-t-transparent text-blue-400 ${sizeMap[size]} ${className ?? ''}`}
       role="status"
+      aria-label="loading"
+      className={clsx('inline-block animate-spin rounded-full border-linestrong border-t-accent', dim, className)}
     />
   );
 }
-

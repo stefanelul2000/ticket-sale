@@ -30,7 +30,7 @@ class TicketTypeController extends Controller
         $data = $this->validated($request, $ticketTypeId);
 
         if ((int) $data['event_id'] !== (int) $ticket->event_id && Ticket::where('ticket_type_id', $ticket->id)->exists()) {
-            return response()->json(['message' => 'Tickets already exist for this type; it cannot move to another event.'], 422);
+            return response()->json(['message' => __('Tickets already exist for this type; it cannot move to another event.')], 422);
         }
 
         $ticket->update($data);
@@ -44,7 +44,7 @@ class TicketTypeController extends Controller
         $issued = Ticket::where('ticket_type_id', $ticket->id)->count();
         if ($issued > 0) {
             return response()->json([
-                'message' => "{$issued} ticket(s) were generated for this type; it cannot be deleted.",
+                'message' => __(':n ticket(s) were generated for this type; it cannot be deleted.', ['n' => $issued]),
             ], 409);
         }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { IScannerControls } from '@zxing/browser';
+import { t } from '../../i18n';
 
 type Props = {
   /** Called once per decoded code; the same code is ignored for `cooldownMs`. */
@@ -30,7 +31,7 @@ export function CameraScanner({ onDetected, onClose, paused = false, cooldownMs 
 
     (async () => {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia) {
-        setError('Camera needs HTTPS. Open the app via its https:// address.');
+        setError(t('camera.https'));
         setStarting(false);
         return;
       }
@@ -65,10 +66,10 @@ export function CameraScanner({ onDetected, onClose, paused = false, cooldownMs 
         const name = err?.name ?? '';
         setError(
           name === 'NotAllowedError'
-            ? 'Camera permission denied. Allow camera access in the browser settings.'
+            ? t('camera.denied')
             : name === 'NotFoundError'
-              ? 'No camera found on this device.'
-              : `Camera could not start (${err?.message ?? name ?? 'unknown error'}).`,
+              ? t('camera.none')
+              : t('camera.failed', { error: err?.message ?? name ?? '?' }),
         );
       } finally {
         if (!cancelled) setStarting(false);
@@ -84,20 +85,20 @@ export function CameraScanner({ onDetected, onClose, paused = false, cooldownMs 
 
   return (
     <div className="space-y-3">
-      <div className="relative overflow-hidden rounded-2xl border border-slate-700 bg-black">
+      <div className="relative overflow-hidden rounded-xl border border-line bg-black">
         <video ref={videoRef} className="aspect-[4/3] w-full object-cover" muted playsInline />
         <div className="pointer-events-none absolute inset-[18%] rounded-xl border-2 border-white/70" />
         {starting && !error && (
-          <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">Starting camera…</div>
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-white/80">{t('camera.starting')}</div>
         )}
       </div>
-      {error && <p className="text-sm text-red-300">{error}</p>}
+      {error && <p className="text-sm font-semibold text-danger">{error}</p>}
       <button
         type="button"
         onClick={onClose}
-        className="w-full rounded-xl border border-slate-700 px-4 py-2 text-sm text-slate-200 hover:border-slate-500"
+        className="w-full rounded border border-linestrong px-4 py-2 text-sm font-semibold text-soft hover:text-ink"
       >
-        Close camera
+        {t('camera.close')}
       </button>
     </div>
   );

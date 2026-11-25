@@ -1,6 +1,6 @@
-# Ticket Sale (Modernized)
+# Bilete · Atelier Săcelean
 
-Event ticketing portal with Laravel API + React/Vite frontend, Dockerized for easy deployment.
+Invitation and door-check-in platform for [Asociația Atelier Săcelean](https://atelier-sacelean.ro) — Laravel API + React/Vite SPA (Romanian/English, light/dark, Atelier Săcelean design), Dockerized.
 
 ## Structure
 - `app/backend` — Laravel API (auth, roles, events, tickets, branding, setup).
@@ -25,14 +25,16 @@ docker exec ticket-sale-app s6-setuidgid www-data php artisan user:create-owner 
 - Backups: `scripts/backup-db.sh` (reads `DB_CONTAINER`/`DB_DATABASE` from `data/ticket-sale.env`; cron it hourly; restore command inside the script).
 - Emergency: `php artisan user:reset-password <username>` (also re-activates the account).
 
-## Ticket workflow
-1. **Events** → create the event and a ticket type, then **Generate tickets**. Codes are random (`K7M3P-9QXR2`), not guessable.
-2. **Download… → Barcodes ZIP**: per ticket a print card (QR + CODE128 + code + number), plus QR-only and CODE128-only images and a CSV for mail merge.
-3. **Sell / assign** (Seller and up): scan or type the code and enter the guest name. A ticket must be sold/assigned before it can enter.
-4. **Door check-in** (Check-in, Manager, Admin; not Sellers): Zebra/USB scanners type into the field (Enter submits); phones use the **Camera** button (needs HTTPS). Results: ENTRY OK / ALREADY CHECKED IN / NOT SOLD / UNKNOWN.
-5. **Tickets** page: search by code, name or number; Managers can *Undo sale* for tickets not yet checked in.
+## How it works
+- **Events** (managers): create the event (date, venue, capacity, description, public page, Nextcloud photos link, donation link). Each event has tabs: *Overview* (live report), *Guests*, *Invitations & print*, *Types*, *Settings* (duplicate for next year, delete).
+- **Invitations & print**: generate random, unguessable codes (`K7M3P-9QXR2`) or paste a guest list (`Name; category`) to get personalised invitations. The ZIP contains a print card per invitation (logo, event, date, guest name, QR + CODE128), QR-only and CODE128-only images and a CSV for mail merge.
+- **QR codes** contain the public ticket URL (`<public_url>/t/CODE`): parents land on the event page (status, *Donează* and *Poze* buttons); door scanners extract the code from the same QR. CODE128 holds the plain code. Set the public URL in *Settings* before printing.
+- **Assign invitations** (volunteers): scan/type the code, type the guest name, optional category (parent, family, friend, official guest, partner, press, other). A ticket must be assigned before it is valid at the door.
+- **Door** (check-in staff): bound to one event; scanners (Zebra DataWedge keyboard output, USB) or the phone camera; results ENTRY OK / ALREADY IN / NOT ASSIGNED / WRONG EVENT / UNKNOWN; name search; walk-ins without invitation; live counters.
+- **Reports**: per event (attendance, arrivals per 15 min, who came by category, distribution per day, volunteers, CSV) and across events; returning guests (managers).
+- **Public pages**: `/e` (published events), `/e/<slug>`, `/t/<code>` — no guest names are ever shown publicly.
 
-Roles: Viewer < Check-in < Seller < Event Manager < Admin < Site Owner. Admins only manage users below their own level; the site owner cannot be changed by admins.
+Roles: Reports < Door < Volunteer < Event manager < Admin < Owner (see the *Users* page). Admins only manage users below their own level. Public self-registration is off (`REGISTRATION_ENABLED=false`).
 
 ## Setup wizard (non-Docker installs)
 If no admin exists the SPA shows a setup wizard. With `SETUP_ENABLED=true` it also asks for DB credentials; with `false` the DB comes from the environment. It locks itself once an admin exists.

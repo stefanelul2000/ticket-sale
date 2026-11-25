@@ -17,7 +17,7 @@ class RequireRole
         $roleId = (int) ($user?->role_id ?? 0);
 
         if (! $user || $roleId < (int) $minRoleId || in_array((string) $roleId, $excluded, true)) {
-            throw new AccessDeniedHttpException('Your role is not allowed to do this.');
+            throw new AccessDeniedHttpException(__('Your role is not allowed to do this.'));
         }
 
         return $next($request);

@@ -51,7 +51,7 @@ class UserController extends Controller
     )]
     public function index()
     {
-        return User::with('role')->orderBy('name')->paginate(50);
+        return User::with('role')->orderBy('name')->paginate(200);
     }
 
     #[OA\Post(
@@ -240,14 +240,14 @@ class UserController extends Controller
         $actor = $request->user();
 
         if ($actor && $actor->id === $user->id) {
-            abort(403, 'You cannot change your own role.');
+            abort(403, __('You cannot change your own role.'));
         }
 
         $this->assertCanManage($request, $user);
         $this->assertCanAssignRole($request, (int) $data['role_id']);
 
         if ((int) $user->role_id === 6 && (int) $data['role_id'] !== 6 && User::where('role_id', 6)->count() <= 1) {
-            abort(422, 'The last site owner cannot be demoted.');
+            abort(422, __('The last site owner cannot be demoted.'));
         }
 
         $oldRoleId = $user->role_id;
@@ -305,7 +305,7 @@ class UserController extends Controller
         $user = User::findOrFail($userId);
 
         if ($request->user()?->id === $user->id) {
-            abort(403, 'You cannot change your own status.');
+            abort(403, __('You cannot change your own status.'));
         }
         $this->assertCanManage($request, $user);
 
@@ -352,7 +352,7 @@ class UserController extends Controller
         $user = User::findOrFail($userId);
 
         if ($request->user()?->id === $user->id) {
-            abort(403, 'You cannot delete your own account.');
+            abort(403, __('You cannot delete your own account.'));
         }
         $this->assertCanManage($request, $user);
 
@@ -413,7 +413,7 @@ class UserController extends Controller
         }
 
         if ((int) $target->role_id >= $actorRole) {
-            abort(403, 'You cannot modify a user with the same or a higher role.');
+            abort(403, __('You cannot modify a user with the same or a higher role.'));
         }
     }
 
@@ -426,7 +426,7 @@ class UserController extends Controller
         }
 
         if ($roleId >= $actorRole) {
-            abort(403, 'You can only assign roles below your own.');
+            abort(403, __('You can only assign roles below your own.'));
         }
     }
 }
