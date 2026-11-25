@@ -21,10 +21,10 @@ class UserManagementTest extends TestCase
 
         $this->actingAs($admin)->patchJson("/api/users/{$admin->id}/role", ['role_id' => 6])->assertForbidden();
         $this->actingAs($admin)->postJson('/api/users', [
-            'name' => 'Evil', 'username' => 'evil', 'password' => 'password123', 'role_id' => 6,
+            'name' => 'Evil', 'username' => 'evil', 'password' => 'password1234', 'role_id' => 6,
         ])->assertForbidden();
         $this->actingAs($admin)->postJson('/api/users', [
-            'name' => 'Peer', 'username' => 'peer', 'password' => 'password123', 'role_id' => 5,
+            'name' => 'Peer', 'username' => 'peer', 'password' => 'password1234', 'role_id' => 5,
         ])->assertForbidden();
 
         $this->assertSame(5, $admin->fresh()->role_id);
@@ -35,7 +35,7 @@ class UserManagementTest extends TestCase
         $owner = $this->userWithRole(6);
         $admin = $this->userWithRole(5);
 
-        $this->actingAs($admin)->patchJson("/api/users/{$owner->id}", ['password' => 'hijacked123'])->assertForbidden();
+        $this->actingAs($admin)->patchJson("/api/users/{$owner->id}", ['password' => 'hijacked12345'])->assertForbidden();
         $this->actingAs($admin)->patchJson("/api/users/{$owner->id}/status", ['active' => false])->assertForbidden();
         $this->actingAs($admin)->patchJson("/api/users/{$owner->id}/role", ['role_id' => 1])->assertForbidden();
         $this->actingAs($admin)->deleteJson("/api/users/{$owner->id}")->assertForbidden();

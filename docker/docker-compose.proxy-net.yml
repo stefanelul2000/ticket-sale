@@ -1,0 +1,14 @@
+# Run behind a reverse-proxy container (e.g. SWAG) on its docker network instead of
+# publishing a host port. Only the proxy network subnet is trusted for X-Forwarded-*.
+#   PROXY_NETWORK=frontend  TRUSTED_PROXIES=172.16.0.0/24
+services:
+  app:
+    ports: !reset []
+    networks: [ticket, proxynet]
+    environment:
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:?set TRUSTED_PROXIES to the proxy network subnet}
+
+networks:
+  proxynet:
+    name: ${PROXY_NETWORK:?set PROXY_NETWORK}
+    external: true

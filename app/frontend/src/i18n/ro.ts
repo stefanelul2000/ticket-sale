@@ -334,7 +334,7 @@ export const ro = {
   'users.deleteConfirm': 'Ștergi contul lui {name}?',
   'users.lastLogin': 'ultima conectare {when}',
   'users.neverLoggedIn': 'nu s-a conectat încă',
-  'users.passwordHint': 'Cel puțin 8 caractere.',
+  'users.passwordHint': 'Cel puțin 10 caractere. Pentru telefoanele de la intrare folosește conturi separate și ieși din cont după eveniment.',
   'users.rolesTitle': 'Ce poate face fiecare rol',
 
   'imp.title': 'Vezi aplicația ca alt rol',

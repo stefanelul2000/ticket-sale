@@ -208,7 +208,7 @@ function UserModal({ user, assignable, isSelf, onClose, onSaved }: { user: Parti
           type="password"
           autoComplete="new-password"
           required={isNew}
-          minLength={8}
+          minLength={10}
           value={form.password}
           onChange={(e) => setForm({ ...form, password: e.target.value })}
           hint={t('users.passwordHint')}

@@ -41,6 +41,7 @@ class SetupTest extends TestCase
         $this->getJson('/api/setup/status')->assertJson(['needsSetup' => false, 'adminExists' => true]);
 
         auth()->guard('web')->logout();
+        $this->flushSession();
         $this->postJson('/api/setup', $this->payload(['username' => 'attacker', 'email' => 'a@example.com']))->assertForbidden();
         $this->assertDatabaseMissing('users', ['username' => 'attacker']);
     }

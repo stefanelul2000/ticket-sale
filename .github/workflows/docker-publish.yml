@@ -85,6 +85,7 @@ jobs:
             -e SESSION_DRIVER=file \
             -e QUEUE_CONNECTION=sync \
             -e SESSION_SECURE_COOKIE=false \
+            -e API_DOCS_ENABLED=true \
             ${{ env.IMAGE_NAME }}:dev-latest
 
           # Wait for health endpoint

@@ -2,7 +2,6 @@
 
 namespace App\Providers;
 
-use Illuminate\Auth\Notifications\ResetPassword;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -35,11 +34,8 @@ class AppServiceProvider extends ServiceProvider
             });
         }
 
-        // Public pages: generous for real visitors, blocks code enumeration.
-        RateLimiter::for('public', fn (Request $request) => Limit::perMinute(60)->by($request->ip()));
-
-        ResetPassword::createUrlUsing(function (object $notifiable, string $token) {
-            return config('app.frontend_url')."/password-reset/$token?email={$notifiable->getEmailForPasswordReset()}";
-        });
+        // Public pages: guests on one venue Wi-Fi share an IP, so keep it generous.
+        // Enumerating codes is infeasible anyway (30^10 combinations).
+        RateLimiter::for('public', fn (Request $request) => Limit::perMinute(300)->by($request->ip()));
     }
 }

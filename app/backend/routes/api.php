@@ -19,8 +19,11 @@ use Illuminate\Support\Facades\Route;
 | "role:N" = level N or higher; extra parameters are excluded levels ("role:2,3" = 2+ except volunteers).
 */
 
-// ---------- Public (no login) ----------
-Route::middleware('throttle:public')->prefix('public')->group(function () {
+// ---------- Public (no login, no session/cookies: unaffected by staff login state) ----------
+Route::middleware('throttle:public')
+    ->withoutMiddleware([\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class])
+    ->prefix('public')
+    ->group(function () {
     Route::get('/settings', [PublicController::class, 'settings']);
     Route::get('/events', [PublicController::class, 'events']);
     Route::get('/events/{slug}', [PublicController::class, 'event'])->where('slug', '[a-z0-9-]{1,190}');
@@ -87,8 +90,8 @@ Route::middleware(['auth:sanctum', 'active', 'impersonate'])->group(function () 
         Route::get('/stats', [TicketController::class, 'stats']);
     });
 
-    // Guest lists and live activity (door staff and up)
-    Route::middleware('role:2')->group(function () {
+    // Guest lists and live activity (door staff, managers, admins — not volunteers)
+    Route::middleware('role:2,3')->group(function () {
         Route::get('/tickets', [TicketController::class, 'index']);
         Route::get('/ticket-activity', [TicketActivityController::class, 'index']);
     });

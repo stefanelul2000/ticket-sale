@@ -3,6 +3,8 @@
 namespace Tests;
 
 use App\Models\Event;
+use App\Models\Ticket;
+use App\Support\TicketCode;
 use App\Models\TicketType;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -16,6 +18,12 @@ abstract class TestCase extends BaseTestCase
         parent::setUp();
         // Behave like the SPA: Sanctum treats requests from this origin as stateful (session + CSRF).
         $this->withHeader('Origin', 'http://localhost');
+    }
+
+    /** Event id of a ticket (the door and assign screens always send it). */
+    protected function eventOf(string $code): int
+    {
+        return (int) Ticket::where('ticket_code', TicketCode::normalize($code))->value('event_id');
     }
 
     protected function seedRoles(): void

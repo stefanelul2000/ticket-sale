@@ -15,11 +15,15 @@ docker build -f docker/Dockerfile --target app -t ticket-sale:local .
 # 3a. Start app + bundled MySQL + Redis (only the app port is published)
 docker compose -p ticket-sale -f docker/docker-compose.yml --profile bundled-db --env-file /path/to/ticket-sale.env up -d
 # 3b. ...or use an existing MySQL/MariaDB server (set DB_HOST, DB_NETWORK, DB_PASSWORD in the env file)
-docker compose -p ticket-sale -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml --env-file /path/to/ticket-sale.env up -d
+#     and sit behind a reverse-proxy container without publishing a host port (PROXY_NETWORK, TRUSTED_PROXIES):
+docker compose -p ticket-sale -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml \
+  -f docker/docker-compose.proxy-net.yml --env-file /path/to/ticket-sale.env up -d
 # 4. Create the first owner account before exposing the site
 docker exec ticket-sale-app s6-setuidgid www-data php artisan user:create-owner <username> <email> "<Name>"
 ```
-- Put it behind an HTTPS reverse proxy that sets `X-Forwarded-Proto/Host` (private-network proxies are trusted by default, see `TRUSTED_PROXIES`). Set `APP_URL` and `SANCTUM_STATEFUL_DOMAINS` to the public host.
+- Put it behind an HTTPS reverse proxy that sets `X-Forwarded-Proto/Host`. Set `TRUSTED_PROXIES` to the proxy's network only, and `APP_URL` / `SANCTUM_STATEFUL_DOMAINS` to the public host.
+- Recommended CSP for the host: `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; media-src 'self' blob:; worker-src 'self' blob:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'` and `Permissions-Policy: camera=(self)`.
+- Swagger docs are off unless `API_DOCS_ENABLED=true`. There is no email password reset: admins reset passwords (or `php artisan user:reset-password`).
 - Migrations run on every container start; roles/permissions are seeded on first start.
 - Health: `GET /api/health` (checks the database; used by the container healthcheck).
 - Backups: `scripts/backup-db.sh` (reads `DB_CONTAINER`/`DB_DATABASE` from `data/ticket-sale.env`; cron it hourly; restore command inside the script).

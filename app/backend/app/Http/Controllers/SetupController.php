@@ -42,24 +42,24 @@ class SetupController extends Controller
         $this->assertSetupOpen();
 
         $dbRequired = $this->isSetupEnabled();
-        $dbRules = $dbRequired ? ['required', 'string'] : ['prohibited'];
+        $dbRules = $dbRequired ? ['required', 'string', 'not_regex:/[\r\n]/'] : ['prohibited'];
 
         $data = $request->validate([
             'db_host' => $dbRules,
             'db_name' => $dbRules,
             'db_user' => $dbRules,
-            'db_password' => $dbRequired ? ['nullable', 'string'] : ['prohibited'],
-            'name' => ['required', 'string', 'max:255'],
+            'db_password' => $dbRequired ? ['nullable', 'string', 'not_regex:/[\r\n]/'] : ['prohibited'],
+            'name' => ['not_regex:/[\r\n]/', 'required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255'],
-            'username' => ['required', 'string', 'max:255', 'alpha_dash'],
+            'username' => ['not_regex:/[\r\n]/', 'required', 'string', 'max:255', 'alpha_dash'],
             'password' => ['required', 'confirmed', Password::min(12)->mixedCase()->numbers()->symbols()],
-            'mail_mailer' => ['nullable', 'string', 'in:log,smtp,sendmail,array'],
-            'mail_host' => ['nullable', 'string', 'max:255'],
+            'mail_mailer' => ['not_regex:/[\r\n]/', 'nullable', 'string', 'in:log,smtp,sendmail,array'],
+            'mail_host' => ['not_regex:/[\r\n]/', 'nullable', 'string', 'max:255'],
             'mail_port' => ['nullable', 'numeric'],
-            'mail_username' => ['nullable', 'string', 'max:255'],
-            'mail_password' => ['nullable', 'string', 'max:255'],
+            'mail_username' => ['not_regex:/[\r\n]/', 'nullable', 'string', 'max:255'],
+            'mail_password' => ['not_regex:/[\r\n]/', 'nullable', 'string', 'max:255'],
             'mail_from_address' => ['nullable', 'email'],
-            'mail_from_name' => ['nullable', 'string', 'max:255'],
+            'mail_from_name' => ['not_regex:/[\r\n]/', 'nullable', 'string', 'max:255'],
         ]);
 
         $lock = Cache::lock('setup:create', 60);
@@ -111,7 +111,7 @@ class SetupController extends Controller
             if (User::where('username', $data['username'])->orWhere('email', $data['email'])->exists()) {
                 return response()->json([
                     'message' => 'Username or email already exists in this database.',
-                    'errors' => ['username' => ['Username or email already exists.']],
+                    'errors' => ['username' => ['not_regex:/[\r\n]/', 'Username or email already exists.']],
                 ], 422);
             }
 
@@ -187,9 +187,9 @@ class SetupController extends Controller
         }
 
         $data = $request->validate([
-            'db_host' => ['required', 'string'],
-            'db_name' => ['required', 'string'],
-            'db_user' => ['required', 'string'],
+            'db_host' => ['not_regex:/[\r\n]/', 'required', 'string'],
+            'db_name' => ['not_regex:/[\r\n]/', 'required', 'string'],
+            'db_user' => ['not_regex:/[\r\n]/', 'required', 'string'],
             'db_password' => ['nullable', 'string'],
         ]);
 

@@ -71,7 +71,7 @@ export function DashboardPage() {
               </Card>
             )}
           </div>
-          {role >= 2 ? <ActivityFeed eventId={current.id} /> : <QuickReport />}
+          {role >= 2 && role !== 3 ? <ActivityFeed eventId={current.id} /> : <QuickReport />}
         </div>
       )}
     </div>

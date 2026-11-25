@@ -54,7 +54,7 @@ class EventFeaturesTest extends TestCase
         [$a, $typeA] = $this->eventWithType();
         [$b] = $this->eventWithType();
         $code = $this->generate($a, $typeA->id, 1)[0];
-        $this->actingAs($this->userWithRole(3))->postJson("/api/tickets/{$code}/sell", ['name' => 'Ana'])->assertOk();
+        $this->actingAs($this->userWithRole(3))->postJson("/api/tickets/{$code}/sell", ['event_id' => $this->eventOf($code), 'name' => 'Ana'])->assertOk();
 
         $door = $this->userWithRole(2);
         $this->actingAs($door)->postJson("/api/tickets/{$code}/checkin", ['event_id' => $b->id])
@@ -67,7 +67,7 @@ class EventFeaturesTest extends TestCase
     {
         [$event, $type] = $this->eventWithType();
         $code = $this->generate($event, $type->id, 1)[0];
-        $this->actingAs($this->userWithRole(3))->postJson("/api/tickets/{$code}/sell", ['name' => 'Ana', 'guest_category' => 'family'])->assertOk();
+        $this->actingAs($this->userWithRole(3))->postJson("/api/tickets/{$code}/sell", ['event_id' => $this->eventOf($code), 'name' => 'Ana', 'guest_category' => 'family'])->assertOk();
 
         $this->assertSame($code, TicketCode::normalize("https://ticket.example.org/t/{$code}"));
         $this->assertSame($code, TicketCode::normalize('https://ticket.example.org/t/'.strtolower(str_replace('-', '', $code)).'?x=1'));
@@ -77,7 +77,7 @@ class EventFeaturesTest extends TestCase
     {
         [$event, $type] = $this->eventWithType();
         $code = $this->generate($event, $type->id, 1)[0];
-        $this->actingAs($this->userWithRole(3))->postJson("/api/tickets/{$code}/sell", ['name' => 'Ana', 'guest_category' => 'vip<script>'])
+        $this->actingAs($this->userWithRole(3))->postJson("/api/tickets/{$code}/sell", ['event_id' => $this->eventOf($code), 'name' => 'Ana', 'guest_category' => 'vip<script>'])
             ->assertStatus(422);
     }
 
@@ -86,7 +86,7 @@ class EventFeaturesTest extends TestCase
         [$event, $type] = $this->eventWithType();
         $code = $this->generate($event, $type->id, 1)[0];
         $vol = $this->userWithRole(3);
-        $this->actingAs($vol)->postJson("/api/tickets/{$code}/sell", ['name' => 'Ana Pp'])->assertOk();
+        $this->actingAs($vol)->postJson("/api/tickets/{$code}/sell", ['event_id' => $this->eventOf($code), 'name' => 'Ana Pp'])->assertOk();
         $this->actingAs($vol)->patchJson("/api/tickets/{$code}", ['name' => 'Ana Pop', 'guest_category' => 'parent'])
             ->assertOk()->assertJson(['name' => 'Ana Pop', 'guest_category' => 'parent']);
         $this->actingAs($this->userWithRole(2))->patchJson("/api/tickets/{$code}", ['name' => 'X'])->assertForbidden();
@@ -150,9 +150,9 @@ class EventFeaturesTest extends TestCase
         $codes = $this->generate($event, $type->id, 4);
         $vol = $this->userWithRole(3);
         $door = $this->userWithRole(2);
-        $this->actingAs($vol)->postJson("/api/tickets/{$codes[0]}/sell", ['name' => 'A', 'guest_category' => 'parent']);
-        $this->actingAs($vol)->postJson("/api/tickets/{$codes[1]}/sell", ['name' => 'B', 'guest_category' => 'friend']);
-        $this->actingAs($door)->postJson("/api/tickets/{$codes[0]}/checkin");
+        $this->actingAs($vol)->postJson("/api/tickets/{$codes[0]}/sell", ['event_id' => $this->eventOf($codes[0]), 'name' => 'A', 'guest_category' => 'parent']);
+        $this->actingAs($vol)->postJson("/api/tickets/{$codes[1]}/sell", ['event_id' => $this->eventOf($codes[1]), 'name' => 'B', 'guest_category' => 'friend']);
+        $this->actingAs($door)->postJson("/api/tickets/{$codes[0]}/checkin", ['event_id' => $this->eventOf($codes[0])]);
         $this->actingAs($door)->postJson("/api/events/{$event->id}/walk-in", ['name' => 'C']);
 
         $res = $this->actingAs($this->userWithRole(1))->getJson("/api/reports/events/{$event->id}")->assertOk();
@@ -175,8 +175,8 @@ class EventFeaturesTest extends TestCase
         $ca = $this->generate($a, $ta->id, 1)[0];
         $cb = $this->generate($b, $tb->id, 1)[0];
         $vol = $this->userWithRole(3);
-        $this->actingAs($vol)->postJson("/api/tickets/{$ca}/sell", ['name' => 'Maria Ionescu']);
-        $this->actingAs($vol)->postJson("/api/tickets/{$cb}/sell", ['name' => ' maria  ionescu ']);
+        $this->actingAs($vol)->postJson("/api/tickets/{$ca}/sell", ['event_id' => $this->eventOf($ca), 'name' => 'Maria Ionescu']);
+        $this->actingAs($vol)->postJson("/api/tickets/{$cb}/sell", ['event_id' => $this->eventOf($cb), 'name' => ' maria  ionescu ']);
 
         $this->actingAs($this->userWithRole(4))->getJson('/api/reports/repeat-guests')
             ->assertOk()->assertJsonCount(1)->assertJson([['events_count' => 2]]);

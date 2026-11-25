@@ -241,7 +241,7 @@ class TicketController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'guest_category' => ['nullable', GuestCategory::rule()],
-            'event_id' => ['nullable', 'integer'],
+            'event_id' => ['required', 'integer'],
         ]);
         $name = trim($data['name']);
 
@@ -252,7 +252,7 @@ class TicketController extends Controller
             return response()->json(['message' => __('Ticket not found.'), 'result' => 'not_found'], 404);
         }
 
-        if ($wrong = $this->wrongEvent($ticket, $data['event_id'] ?? null)) {
+        if ($wrong = $this->wrongEvent($ticket, (int) $data['event_id'])) {
             $this->recordActivity($request, 'sell', $ticket->ticket_code, 'Wrong event.', false);
 
             return $wrong;
@@ -305,16 +305,31 @@ class TicketController extends Controller
             return response()->json(['message' => __('Ticket is not assigned yet.')], 409);
         }
 
+        $actor = $request->user();
+        if ((int) $actor->role_id < 4) {
+            // Volunteers fix only their own, not-yet-used assignments.
+            if ((int) $ticket->user_id !== (int) $actor->id || $ticket->checkin) {
+                return response()->json(['message' => __('Only the volunteer who assigned this invitation (or a manager) can change it.')], 403);
+            }
+        }
+
         $before = $ticket->only(['name', 'guest_category']);
         if (array_key_exists('name', $data)) {
             $data['name'] = trim($data['name']);
         }
-        $ticket->update($data);
+        $data['updated_at'] = Carbon::now();
+        // Atomic: never write a name onto a ticket that was released meanwhile.
+        $updated = Ticket::whereKey($ticket->id)->whereNotNull('sold_at')->update($data);
+        if ($updated === 0) {
+            return response()->json(['message' => __('Ticket changed meanwhile; reload and try again.')], 409);
+        }
+        $ticket->refresh();
 
-        $this->logAdminAction($request->user()?->id, 'ticket.update', [
+        $this->logAdminAction($actor->id, 'ticket.update', [
             'ticket_code' => $ticket->ticket_code,
             'before' => $before,
             'after' => $ticket->only(['name', 'guest_category']),
+            'event_id' => $ticket->event_id,
         ]);
 
         return response()->json($this->present($ticket));
@@ -362,7 +377,8 @@ class TicketController extends Controller
 
     public function checkin(Request $request, string $ticketCode)
     {
-        $eventId = $request->integer('event_id') ?: null;
+        // The door is always bound to one event: a ticket for another event never gets in.
+        $eventId = (int) $request->validate(['event_id' => ['required', 'integer']])['event_id'];
 
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
@@ -425,7 +441,7 @@ class TicketController extends Controller
 
     public function verify(Request $request, string $ticketCode)
     {
-        $eventId = $request->integer('event_id') ?: null;
+        $eventId = (int) $request->validate(['event_id' => ['required', 'integer']])['event_id'];
 
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {

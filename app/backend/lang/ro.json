@@ -37,5 +37,6 @@
   "CSRF token mismatch.": "Sesiunea a expirat. Reîncarcă pagina.",
   "Server Error": "Eroare de server",
   "Not Found": "Nu a fost găsit",
-  "Forbidden": "Acces interzis"
+  "Forbidden": "Acces interzis",
+  "Only the volunteer who assigned this invitation (or a manager) can change it.": "Doar voluntarul care a atribuit invitația (sau un manager) o poate modifica."
 }

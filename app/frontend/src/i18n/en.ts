@@ -335,7 +335,7 @@ export const en: Record<keyof typeof ro, string> = {
   'users.deleteConfirm': 'Delete {name}’s account?',
   'users.lastLogin': 'last sign-in {when}',
   'users.neverLoggedIn': 'never signed in',
-  'users.passwordHint': 'At least 8 characters.',
+  'users.passwordHint': 'At least 10 characters. Use separate accounts for door phones and sign out after the event.',
   'users.rolesTitle': 'What each role can do',
 
   'imp.title': 'View the app as another role',

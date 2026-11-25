@@ -89,7 +89,7 @@ class UserController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'email' => ['nullable', 'email', 'max:255', 'unique:users,email'],
             'username' => ['required', 'string', 'max:255', 'unique:users,username'],
-            'password' => ['required', 'string', 'min:8'],
+            'password' => ['required', 'string', 'min:10', 'max:200'],
             'role_id' => ['required', 'integer', 'exists:roles,id'],
         ]);
 
@@ -160,7 +160,7 @@ class UserController extends Controller
             'name' => ['sometimes', 'string', 'max:255'],
             'email' => ['sometimes', 'nullable', 'email', 'max:255', 'unique:users,email,' . $user->id],
             'username' => ['sometimes', 'string', 'max:255', 'unique:users,username,' . $user->id],
-            'password' => ['sometimes', 'nullable', 'string', 'min:8'],
+            'password' => ['sometimes', 'nullable', 'string', 'min:10', 'max:200'],
         ]);
 
         $changes = [];

@@ -79,7 +79,7 @@ class TicketFlowTest extends TestCase
         [, , $codes] = $this->generate(1);
         $door = $this->userWithRole(2);
 
-        $this->actingAs($door)->postJson("/api/tickets/{$codes[0]}/checkin")
+        $this->actingAs($door)->postJson("/api/tickets/{$codes[0]}/checkin", ['event_id' => $this->eventOf($codes[0])])
             ->assertStatus(409)
             ->assertJson(['result' => 'not_sold']);
 
@@ -92,15 +92,15 @@ class TicketFlowTest extends TestCase
         $seller = $this->userWithRole(3);
         $door = $this->userWithRole(2);
 
-        $this->actingAs($seller)->postJson("/api/tickets/{$codes[0]}/sell", ['name' => 'Ana Pop'])->assertOk();
+        $this->actingAs($seller)->postJson("/api/tickets/{$codes[0]}/sell", ['event_id' => $this->eventOf($codes[0]), 'name' => 'Ana Pop'])->assertOk();
 
         // Scanner input variants (lower case, no dash) resolve to the same ticket.
         $scanned = strtolower(str_replace('-', '', $codes[0]));
-        $this->actingAs($door)->postJson("/api/tickets/{$scanned}/checkin")
+        $this->actingAs($door)->postJson("/api/tickets/{$scanned}/checkin", ['event_id' => $this->eventOf($scanned)])
             ->assertOk()
             ->assertJson(['result' => 'ok', 'ticket' => ['name' => 'Ana Pop']]);
 
-        $this->actingAs($door)->postJson("/api/tickets/{$codes[0]}/checkin")
+        $this->actingAs($door)->postJson("/api/tickets/{$codes[0]}/checkin", ['event_id' => $this->eventOf($codes[0])])
             ->assertStatus(409)
             ->assertJson(['result' => 'already_checked_in']);
 
@@ -115,28 +115,44 @@ class TicketFlowTest extends TestCase
         [, , $codes] = $this->generate(1);
         $seller = $this->userWithRole(3);
 
-        $this->actingAs($seller)->postJson("/api/tickets/{$codes[0]}/sell", ['name' => 'First'])->assertOk();
-        $this->actingAs($seller)->postJson("/api/tickets/{$codes[0]}/sell", ['name' => 'Second'])->assertStatus(409);
+        $this->actingAs($seller)->postJson("/api/tickets/{$codes[0]}/sell", ['event_id' => $this->eventOf($codes[0]), 'name' => 'First'])->assertOk();
+        $this->actingAs($seller)->postJson("/api/tickets/{$codes[0]}/sell", ['event_id' => $this->eventOf($codes[0]), 'name' => 'Second'])->assertStatus(409);
 
         $this->assertSame('First', Ticket::where('ticket_code', $codes[0])->value('name'));
     }
 
     public function test_unknown_or_guessed_codes_are_rejected(): void
     {
-        $this->generate(3);
+        [$event] = $this->generate(3);
         $door = $this->userWithRole(2);
 
-        $this->actingAs($door)->postJson('/api/tickets/1_001/checkin')->assertNotFound();
-        $this->actingAs($door)->getJson('/api/tickets/AAAAA-AAAAA/verify')->assertNotFound();
+        $this->actingAs($door)->postJson('/api/tickets/1_001/checkin', ['event_id' => $event->id])->assertNotFound();
+        $this->actingAs($door)->getJson('/api/tickets/AAAAA-AAAAA/verify?event_id='.$event->id)->assertNotFound();
+        // The door must always say which event it is scanning for.
+        $this->actingAs($door)->postJson('/api/tickets/AAAAA-AAAAA/checkin')->assertStatus(422);
+    }
+
+    public function test_volunteers_cannot_browse_guest_lists_or_rename_others_tickets(): void
+    {
+        [, , $codes] = $this->generate(2);
+        $vol = $this->userWithRole(3);
+        $other = $this->userWithRole(3);
+
+        $this->actingAs($vol)->getJson('/api/tickets')->assertForbidden();
+        $this->actingAs($vol)->getJson('/api/ticket-activity')->assertForbidden();
+
+        $this->actingAs($other)->postJson("/api/tickets/{$codes[0]}/sell", ['event_id' => $this->eventOf($codes[0]), 'name' => 'Ana'])->assertOk();
+        $this->actingAs($vol)->patchJson("/api/tickets/{$codes[0]}", ['name' => 'Hijack'])->assertForbidden();
+        $this->actingAs($this->userWithRole(4))->patchJson("/api/tickets/{$codes[0]}", ['name' => 'Ana Pop'])->assertOk();
     }
 
     public function test_sellers_cannot_check_in_and_check_in_staff_cannot_sell(): void
     {
         [, , $codes] = $this->generate(1);
 
-        $this->actingAs($this->userWithRole(3))->postJson("/api/tickets/{$codes[0]}/checkin")->assertForbidden();
-        $this->actingAs($this->userWithRole(2))->postJson("/api/tickets/{$codes[0]}/sell", ['name' => 'X'])->assertForbidden();
-        $this->actingAs($this->userWithRole(1))->getJson("/api/tickets/{$codes[0]}/verify")->assertForbidden();
+        $this->actingAs($this->userWithRole(3))->postJson("/api/tickets/{$codes[0]}/checkin", ['event_id' => $this->eventOf($codes[0])])->assertForbidden();
+        $this->actingAs($this->userWithRole(2))->postJson("/api/tickets/{$codes[0]}/sell", ['event_id' => $this->eventOf($codes[0]), 'name' => 'X'])->assertForbidden();
+        $this->actingAs($this->userWithRole(1))->getJson("/api/tickets/{$codes[0]}/verify?event_id=".$this->eventOf($codes[0]))->assertForbidden();
     }
 
     public function test_refund_rules(): void
@@ -146,12 +162,12 @@ class TicketFlowTest extends TestCase
 
         $this->actingAs($manager)->postJson("/api/tickets/{$codes[0]}/refund")->assertStatus(409); // not sold
 
-        $this->actingAs($manager)->postJson("/api/tickets/{$codes[0]}/sell", ['name' => 'A'])->assertOk();
+        $this->actingAs($manager)->postJson("/api/tickets/{$codes[0]}/sell", ['event_id' => $this->eventOf($codes[0]), 'name' => 'A'])->assertOk();
         $this->actingAs($manager)->postJson("/api/tickets/{$codes[0]}/refund")->assertOk();
         $this->assertNull(Ticket::where('ticket_code', $codes[0])->value('sold_at'));
 
-        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/sell", ['name' => 'B'])->assertOk();
-        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/checkin")->assertOk();
+        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/sell", ['event_id' => $this->eventOf($codes[1]), 'name' => 'B'])->assertOk();
+        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/checkin", ['event_id' => $this->eventOf($codes[1])])->assertOk();
         $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/refund")->assertStatus(409); // already used
     }
 
@@ -159,9 +175,9 @@ class TicketFlowTest extends TestCase
     {
         [$event, , $codes] = $this->generate(4);
         $manager = $this->userWithRole(4);
-        $this->actingAs($manager)->postJson("/api/tickets/{$codes[0]}/sell", ['name' => 'A']);
-        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/sell", ['name' => 'B']);
-        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/checkin");
+        $this->actingAs($manager)->postJson("/api/tickets/{$codes[0]}/sell", ['event_id' => $this->eventOf($codes[0]), 'name' => 'A']);
+        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/sell", ['event_id' => $this->eventOf($codes[1]), 'name' => 'B']);
+        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/checkin", ['event_id' => $this->eventOf($codes[1])]);
 
         $this->actingAs($manager)->getJson('/api/stats?event_id='.$event->id)
             ->assertExactJson(['total' => 4, 'sold' => 2, 'unsold' => 2, 'checked_in' => 1, 'walk_ins' => 0]);
@@ -171,7 +187,7 @@ class TicketFlowTest extends TestCase
     {
         [$event, , $codes] = $this->generate(1);
         $manager = $this->userWithRole(4);
-        $this->actingAs($manager)->postJson("/api/tickets/{$codes[0]}/sell", ['name' => 'A']);
+        $this->actingAs($manager)->postJson("/api/tickets/{$codes[0]}/sell", ['event_id' => $this->eventOf($codes[0]), 'name' => 'A']);
 
         $this->actingAs($manager)->deleteJson("/api/events/{$event->id}")->assertStatus(409);
     }

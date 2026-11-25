@@ -10,14 +10,14 @@ import { Logo } from '../components/ui/Misc';
 import { Preferences } from '../components/Preferences';
 
 /** Only same-app paths are allowed as redirect targets. */
-const safeNext = (value: string | null) => (value && value.startsWith('/') && !value.startsWith('//') ? value : '/');
+const safeNext = (value: string | null) => (value && /^\/(?![\/\\])/.test(value) && !value.includes('\\') ? value : '/');
 
 export function LoginPage() {
   const t = useT();
   const { login, loading, user, checked } = useAuth();
   const [params] = useSearchParams();
   const navigate = useNavigate();
-  const [form, setForm] = useState({ username: '', password: '', remember: true });
+  const [form, setForm] = useState({ username: '', password: '', remember: false });
   const [error, setError] = useState<string | null>(null);
 
   if (checked && user) return <Navigate to={safeNext(params.get('next'))} replace />;

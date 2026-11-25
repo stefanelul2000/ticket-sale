@@ -70,7 +70,11 @@ RUN set -eux; \
     chmod +x /docker/entrypoint.sh /etc/s6-overlay/scripts/*.sh; \
     find /etc/s6-overlay -type f \( -name run -o -name up \) -exec chmod +x {} +; \
     php artisan l5-swagger:generate || true; \
-    chown -R www-data:www-data /var/www
+    ln -sfn /var/www/storage/app/public public/storage; \
+    # Code stays root-owned (read-only for php-fpm); only runtime dirs are writable.
+    chown -R root:root /var/www; \
+    chmod -R go-w /var/www; \
+    chown -R www-data:www-data storage bootstrap/cache
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD curl -fsS http://127.0.0.1/api/health || exit 1

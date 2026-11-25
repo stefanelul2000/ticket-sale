@@ -42,16 +42,13 @@ mkdir -p storage/app/public storage/app/private storage/framework/sessions stora
 chown -R www-data:www-data storage bootstrap/cache
 chmod -R ug+rwX storage bootstrap/cache
 
-if [ ! -L public/storage ]; then
-  artisan storage:link >/dev/null 2>&1 || true
-fi
 
 # ---------- frontend runtime config ----------
 # Empty API_URL => the SPA uses its own origin + /api (works behind any proxy/host).
 API_URL="${VITE_API_URL:-}"
 API_URL=$(printf '%s' "$API_URL" | tr -d '"\\<>')
 printf 'window.__APP_CONFIG__ = { API_URL: "%s" };\n' "$API_URL" > public/config.js
-chown www-data:www-data public/config.js
+chmod 644 public/config.js
 log "config.js API_URL='${API_URL}'"
 
 # ---------- caches ----------

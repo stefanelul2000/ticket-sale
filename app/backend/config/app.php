@@ -134,6 +134,8 @@ return [
     */
     'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost')),
 
+    'api_docs' => filter_var(env('API_DOCS_ENABLED', false), FILTER_VALIDATE_BOOL),
+
     'registration_enabled' => filter_var(env('REGISTRATION_ENABLED', false), FILTER_VALIDATE_BOOL),
 
     'setup_enabled' => filter_var(env('SETUP_ENABLED', true), FILTER_VALIDATE_BOOL),
