@@ -92,6 +92,11 @@ export function AdminRolesPage() {
       </div>
 
       <Card title="Role permissions">
+        <p className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-100">
+          Access is decided by role level: Viewer &lt; Check-in &lt; Seller &lt; Event Manager &lt; Admin &lt; Site Owner.
+          Sellers can sell but not check guests in; check-in staff can check in but not sell. The toggles below are
+          stored for reference and do not change access yet.
+        </p>
         <div className="space-y-6">
           {roles.map((role) => (
             <div key={role.id} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">

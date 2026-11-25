@@ -1,48 +1,89 @@
-import axios from 'axios';
+import axios, { AxiosError } from 'axios';
+import type { InternalAxiosRequestConfig } from 'axios';
 
-// Load API URL from runtime config injected by config.js
-const runtimeApiUrl = window.__APP_CONFIG__?.API_URL;
+// Runtime config (public/config.js, written at container start). Empty => same origin.
+const configured = window.__APP_CONFIG__?.API_URL?.trim();
+const runtimeApiUrl = configured && !configured.startsWith('__') ? configured.replace(/\/+$/, '') : '';
+const baseURL = runtimeApiUrl || `${window.location.origin}/api`;
+const appOrigin = new URL(baseURL, window.location.origin).origin;
 
-// Fallback to the detected host if the config is missing
-const fallbackHost = `${window.location.origin}/api`;
-
-// Axios instance
 export const client = axios.create({
-  baseURL: runtimeApiUrl || fallbackHost,
+  baseURL,
   withCredentials: true,
+  withXSRFToken: true,
+  headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' },
 });
 
+/** Sanctum: obtain the XSRF-TOKEN cookie before state-changing auth calls. */
+export const ensureCsrfCookie = () =>
+  axios.get(`${appOrigin}/sanctum/csrf-cookie`, { withCredentials: true }).catch(() => undefined);
+
+type RetriableConfig = InternalAxiosRequestConfig & { _csrfRetried?: boolean };
+
+client.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const config = error.config as RetriableConfig | undefined;
+    const status = error.response?.status;
+
+    // CSRF token expired (e.g. long idle at the door): refresh once and retry.
+    if (status === 419 && config && !config._csrfRetried) {
+      config._csrfRetried = true;
+      await ensureCsrfCookie();
+      return client.request(config);
+    }
+
+    // Session expired: send the user back to the login screen (except for the silent /me probe).
+    if (status === 401 && config?.url && !config.url.endsWith('/me') && !config.url.endsWith('/login')) {
+      sessionStorage.removeItem('ts_logged_in');
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.assign('/login');
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
 
 export type AuthResponse = {
   token?: string;
 };
 
+const code = (value: string) => encodeURIComponent(value);
+
 export const api = {
-  login: (data: { username: string; password: string; remember?: boolean }) =>
-    client.post('/login', data).then((r) => r.data),
-  register: (data: { name: string; email?: string; username: string; password: string; password_confirmation: string }) =>
-    client.post('/register', data).then((r) => r.data),
+  login: async (data: { username: string; password: string; remember?: boolean }) => {
+    await ensureCsrfCookie();
+    return client.post('/login', data).then((r) => r.data);
+  },
+  register: async (data: { name: string; email?: string; username: string; password: string; password_confirmation: string }) => {
+    await ensureCsrfCookie();
+    return client.post('/register', data).then((r) => r.data);
+  },
   logout: () => client.post('/logout'),
   me: () => client.get('/me').then((r) => r.data),
   setupStatus: () => client.get('/setup/status').then((r) => r.data),
-  setup: (payload: any) => client.post('/setup', payload).then((r) => r.data),
+  setup: async (payload: any) => {
+    await ensureCsrfCookie();
+    return client.post('/setup', payload).then((r) => r.data);
+  },
   setupTestDb: (payload: any) => client.post('/setup/test-db', payload).then((r) => r.data),
-  uploadLogo: (formData: FormData) =>
-    client.post('/setup/logo', formData, { headers: { 'Content-Type': 'multipart/form-data' } }).then((r) => r.data),
+  uploadLogo: (formData: FormData) => client.post('/setup/logo', formData).then((r) => r.data),
   branding: () => client.get('/branding').then((r) => r.data),
   saveBranding: (payload: any) => client.post('/branding', payload).then((r) => r.data),
   tickets: (params?: Record<string, any>) => client.get('/tickets', { params }).then((r) => r.data),
-  verify: (ticketNumber: string) => client.get(`/tickets/${ticketNumber}/verify`).then((r) => r.data),
-  checkin: (ticketNumber: string) => client.post(`/tickets/${ticketNumber}/checkin`),
-  sell: (ticketNumber: string, payload: any) => client.post(`/tickets/${ticketNumber}/sell`, payload),
-  refund: (ticketNumber: string) => client.post(`/tickets/${ticketNumber}/refund`),
+  verify: (ticketCode: string) => client.get(`/tickets/${code(ticketCode)}/verify`).then((r) => r.data),
+  checkin: (ticketCode: string) => client.post(`/tickets/${code(ticketCode)}/checkin`).then((r) => r.data),
+  sell: (ticketCode: string, payload: { name: string }) =>
+    client.post(`/tickets/${code(ticketCode)}/sell`, payload).then((r) => r.data),
+  refund: (ticketCode: string) => client.post(`/tickets/${code(ticketCode)}/refund`).then((r) => r.data),
   generate: (payload: { event_id?: number; ticket_type_id: number; count: number }) =>
     client.post('/tickets/generate', payload).then((r) => r.data),
   eventTickets: (eventId: number, ticket_type_id?: number) =>
     client
       .get(`/events/${eventId}/tickets`, { params: ticket_type_id ? { ticket_type_id } : undefined })
       .then((r) => r.data),
-  stats: () => client.get('/stats').then((r) => r.data),
+  stats: (event_id?: number) => client.get('/stats', { params: event_id ? { event_id } : undefined }).then((r) => r.data),
   roles: () => client.get('/roles').then((r) => r.data),
   rolesWithPermissions: () => client.get('/roles/with-permissions').then((r) => r.data),
   permissions: () => client.get('/permissions').then((r) => r.data),

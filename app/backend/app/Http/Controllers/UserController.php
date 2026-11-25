@@ -93,6 +93,8 @@ class UserController extends Controller
             'role_id' => ['required', 'integer', 'exists:roles,id'],
         ]);
 
+        $this->assertCanAssignRole($request, (int) $data['role_id']);
+
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'] ?? null,
@@ -102,6 +104,11 @@ class UserController extends Controller
             'active' => true,
             'revenue' => 0,
             'cookie' => Str::random(64),
+        ]);
+
+        $this->logAdminAction($request->user()?->id, 'user.create', [
+            'target_user_id' => $user->id,
+            'role_id' => $user->role_id,
         ]);
 
         return response()->json($user, 201);
@@ -146,6 +153,8 @@ class UserController extends Controller
         if (! $user) {
             throw new NotFoundHttpException('User not found');
         }
+
+        $this->assertCanManage($request, $user, allowSelf: true);
 
         $data = $request->validate([
             'name' => ['sometimes', 'string', 'max:255'],
@@ -230,21 +239,23 @@ class UserController extends Controller
 
         $actor = $request->user();
 
-        // Block changing a site owner unless the actor is also site owner (role_id 6).
-        if ($user->role_id === 6 && $actor?->role_id !== 6) {
-            abort(403, 'Site owner cannot be changed.');
-        }
-
-        // Prevent an admin from demoting themselves.
-        if ($actor && $actor->id === $user->id && $actor->role_id >= 5 && $data['role_id'] < $actor->role_id) {
+        if ($actor && $actor->id === $user->id) {
             abort(403, 'You cannot change your own role.');
         }
 
+        $this->assertCanManage($request, $user);
+        $this->assertCanAssignRole($request, (int) $data['role_id']);
+
+        if ((int) $user->role_id === 6 && (int) $data['role_id'] !== 6 && User::where('role_id', 6)->count() <= 1) {
+            abort(422, 'The last site owner cannot be demoted.');
+        }
+
+        $oldRoleId = $user->role_id;
         $user->update(['role_id' => $data['role_id']]);
 
         $this->logAdminAction($actor?->id, 'user.role.change', [
             'target_user_id' => $user->id,
-            'old_role_id' => $user->getOriginal('role_id'),
+            'old_role_id' => $oldRoleId,
             'new_role_id' => $data['role_id'],
         ]);
 
@@ -292,7 +303,18 @@ class UserController extends Controller
             'active' => ['required', 'boolean'],
         ]);
         $user = User::findOrFail($userId);
+
+        if ($request->user()?->id === $user->id) {
+            abort(403, 'You cannot change your own status.');
+        }
+        $this->assertCanManage($request, $user);
+
         $user->update(['active' => $data['active']]);
+        $this->logAdminAction($request->user()?->id, 'user.status', [
+            'target_user_id' => $user->id,
+            'active' => (bool) $data['active'],
+        ]);
+
         return response()->json($user);
     }
 
@@ -325,10 +347,22 @@ class UserController extends Controller
             new OA\Response(response: 404, description: 'User not found'),
         ]
     )]
-    public function destroy(int $userId)
+    public function destroy(Request $request, int $userId)
     {
         $user = User::findOrFail($userId);
+
+        if ($request->user()?->id === $user->id) {
+            abort(403, 'You cannot delete your own account.');
+        }
+        $this->assertCanManage($request, $user);
+
+        $user->tokens()->delete();
         $user->delete();
+        $this->logAdminAction($request->user()?->id, 'user.delete', [
+            'target_user_id' => $userId,
+            'username' => $user->username,
+        ]);
+
         return response()->json(['deleted' => true]);
     }
 
@@ -353,5 +387,46 @@ class UserController extends Controller
     public function roles()
     {
         return Role::orderBy('id')->get();
+    }
+
+    /**
+     * Real (non-impersonated) role of the acting user.
+     */
+    private function actorRole(Request $request): int
+    {
+        return (int) ($request->attributes->get('original_role_id') ?? $request->user()?->role_id ?? 0);
+    }
+
+    /**
+     * Site owners manage everyone; admins only manage users below their own level.
+     */
+    private function assertCanManage(Request $request, User $target, bool $allowSelf = false): void
+    {
+        $actorRole = $this->actorRole($request);
+
+        if ($allowSelf && $request->user()?->id === $target->id) {
+            return;
+        }
+
+        if ($actorRole >= 6) {
+            return;
+        }
+
+        if ((int) $target->role_id >= $actorRole) {
+            abort(403, 'You cannot modify a user with the same or a higher role.');
+        }
+    }
+
+    private function assertCanAssignRole(Request $request, int $roleId): void
+    {
+        $actorRole = $this->actorRole($request);
+
+        if ($actorRole >= 6) {
+            return;
+        }
+
+        if ($roleId >= $actorRole) {
+            abort(403, 'You can only assign roles below your own.');
+        }
     }
 }

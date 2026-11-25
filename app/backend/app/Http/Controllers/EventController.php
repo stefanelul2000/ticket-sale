@@ -230,12 +230,22 @@ class EventController extends Controller
     public function destroy(int $eventId)
     {
         $event = Event::findOrFail($eventId);
+
+        $sold = $event->tickets()->whereNotNull('sold_at')->count();
+        if ($sold > 0) {
+            return response()->json([
+                'message' => "This event has {$sold} sold ticket(s) and cannot be deleted. Refund them first.",
+            ], 409);
+        }
+
         DB::transaction(function () use ($event) {
             // Hard delete everything related to this event.
             $event->tickets()->withTrashed()->forceDelete();
             $event->ticketTypes()->withTrashed()->forceDelete();
             $event->forceDelete();
         });
+        $this->logAdminAction(request()->user()?->id, 'event.delete', ['event_id' => $eventId, 'name' => $event->name]);
+
         return response()->json(['deleted' => true]);
     }
 

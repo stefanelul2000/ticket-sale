@@ -13,12 +13,17 @@ type Ticket = {
   name?: string | null;
   sold_at?: string | null;
   seller?: { name?: string | null; username?: string | null };
+  ticket_type?: { id: number; name: string } | null;
   checkin?: boolean;
 };
 
 export function TicketsPage() {
   const roleId = useRoleId();
   const canViewTickets = roleId >= 2;
+  const canRefund = roleId >= 4;
+  const [search, setSearch] = useState('');
+  const [query, setQuery] = useState('');
+  const [busyId, setBusyId] = useState<number | null>(null);
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
   const [tickets, setTickets] = useState<Ticket[]>([]);
@@ -32,12 +37,17 @@ export function TicketsPage() {
   }, [canViewTickets]);
 
   useEffect(() => {
+    const t = setTimeout(() => setQuery(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
     if (!canViewTickets || !selectedEventId) {
       setTickets([]);
       return;
     }
     loadTickets(Number(selectedEventId));
-  }, [selectedEventId, canViewTickets]);
+  }, [selectedEventId, canViewTickets, query]);
 
   const loadEvents = async () => {
     setLoadingEvents(true);
@@ -58,7 +68,7 @@ export function TicketsPage() {
     setLoadingTickets(true);
     setError(null);
     try {
-      const res = await api.tickets({ event_id: eventId, per_page: 1000 });
+      const res = await api.tickets({ event_id: eventId, per_page: 2000, ...(query ? { search: query } : {}) });
       const list = Array.isArray(res?.data) ? res.data : res;
       setTickets(list);
     } catch (err: any) {
@@ -71,6 +81,31 @@ export function TicketsPage() {
   const selectedEventName = useMemo(() => {
     return events.find((event) => String(event.id) === selectedEventId)?.name;
   }, [events, selectedEventId]);
+
+  const refund = async (ticket: Ticket) => {
+    if (!window.confirm(`Undo the sale of ${ticket.ticket_code} (${ticket.name ?? 'no name'})? The ticket becomes unsold again.`)) return;
+    setBusyId(ticket.id);
+    try {
+      await api.refund(ticket.ticket_code);
+      await loadTickets(Number(selectedEventId));
+    } catch (err: any) {
+      setError(err?.response?.data?.message ?? 'Refund failed.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const refundButton = (ticket: Ticket) =>
+    canRefund && ticket.sold_at && !ticket.checkin ? (
+      <button
+        type="button"
+        onClick={() => refund(ticket)}
+        disabled={busyId === ticket.id}
+        className="rounded-lg border border-red-500/50 px-2 py-1 text-xs text-red-200 hover:bg-red-500/10 disabled:opacity-50"
+      >
+        {busyId === ticket.id ? '…' : 'Undo sale'}
+      </button>
+    ) : null;
 
   const formatSoldAt = (value?: string | null) => {
     if (!value) return 'Unsold';
@@ -119,9 +154,16 @@ export function TicketsPage() {
               ))}
             </select>
           </div>
-          <div className="flex items-end">
-            <p className="text-sm text-slate-400">
-              {selectedEventName ? `Showing tickets for ${selectedEventName}.` : 'Select an event to load tickets.'}
+          <div>
+            <label className="text-xs font-semibold uppercase tracking-wide text-slate-400">Search</label>
+            <input
+              className="mt-2 w-full rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-white"
+              placeholder="Code, guest name or ticket #"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+            <p className="mt-2 text-xs text-slate-400">
+              {selectedEventName ? `Showing ${tickets.length} ticket(s) for ${selectedEventName}.` : 'Select an event to load tickets.'}
             </p>
           </div>
         </div>
@@ -135,7 +177,7 @@ export function TicketsPage() {
           </div>
         ) : tickets.length === 0 ? (
           <p className="py-8 text-center text-sm text-slate-500">
-            {selectedEventId ? 'No tickets found for this event yet.' : 'Select an event to view its tickets.'}
+            {selectedEventId ? (query ? 'No tickets match your search.' : 'No tickets found for this event yet.') : 'Select an event to view its tickets.'}
           </p>
         ) : (
           <>
@@ -149,22 +191,26 @@ export function TicketsPage() {
                       <th className="px-3 py-2">Buyer</th>
                       <th className="px-3 py-2">Sold by</th>
                       <th className="px-3 py-2">Sold at</th>
+                      <th className="px-3 py-2">Type</th>
                       <th className="px-3 py-2">Check-in</th>
+                      <th className="px-3 py-2"></th>
                     </tr>
                   </thead>
                   <tbody>
                     {tickets.map((ticket) => (
                       <tr key={ticket.id} className="border-b border-slate-900/60 last:border-0">
                         <td className="px-3 py-3 font-semibold text-white">{ticket.ticket_number}</td>
-                        <td className="px-3 py-3 text-slate-300">{ticket.ticket_code}</td>
+                        <td className="px-3 py-3 font-mono text-slate-300">{ticket.ticket_code}</td>
                         <td className="px-3 py-3">
                           {ticket.name ? <span className="font-medium text-white">{ticket.name}</span> : <span className="text-slate-500">Unsold</span>}
                         </td>
                         <td className="px-3 py-3">{ticket.seller?.name ?? <span className="text-slate-500">—</span>}</td>
                         <td className="px-3 py-3">{formatSoldAt(ticket.sold_at)}</td>
+                        <td className="px-3 py-3 text-slate-300">{ticket.ticket_type?.name ?? '—'}</td>
                         <td className="px-3 py-3">
                           {ticket.checkin ? <span className="text-emerald-300">Checked in</span> : <span className="text-slate-500">Not checked in</span>}
                         </td>
+                        <td className="px-3 py-3">{refundButton(ticket)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -185,6 +231,7 @@ export function TicketsPage() {
                   <div className="text-slate-300">Sold by: {ticket.seller?.name ?? '—'}</div>
                   <div className="text-slate-300">Sold at: {formatSoldAt(ticket.sold_at)}</div>
                   <div className="mt-1 text-sm">{ticket.checkin ? <span className="text-emerald-300">Checked in</span> : <span className="text-slate-500">Not checked in</span>}</div>
+                  <div className="mt-2">{refundButton(ticket)}</div>
                 </div>
               ))}
             </div>

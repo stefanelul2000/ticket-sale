@@ -2,6 +2,12 @@
 backups
 app/backend/storage
 app/backend/vendor
+app/backend/.env
 app/frontend/node_modules
+app/frontend/dist
 node_modules
+**/.env
+docker/local-*
+deploy
 *.log
+data

@@ -65,7 +65,7 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => env('APP_TIMEZONE', 'UTC'),
 
     /*
     |--------------------------------------------------------------------------
@@ -122,5 +122,19 @@ return [
         'driver' => env('APP_MAINTENANCE_DRIVER', 'file'),
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
+
+
+    /*
+    |--------------------------------------------------------------------------
+    | First-run setup
+    |--------------------------------------------------------------------------
+    | setup_enabled: when true the setup wizard asks for DB credentials; when false
+    | the DB settings from the environment are used. Setup always locks itself once
+    | an admin exists. env_store_path: persisted copy of .env (container volume).
+    */
+    'frontend_url' => env('FRONTEND_URL', env('APP_URL', 'http://localhost')),
+
+    'setup_enabled' => filter_var(env('SETUP_ENABLED', true), FILTER_VALIDATE_BOOL),
+    'env_store_path' => env('ENV_STORE_PATH', '/config/app.env'),
 
 ];

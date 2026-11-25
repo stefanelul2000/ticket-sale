@@ -7,23 +7,33 @@ Event ticketing portal with Laravel API + React/Vite frontend, Dockerized for ea
 - `app/frontend` — React + Vite SPA (build output served by Laravel).
 - `docker/` — docker-compose, Dockerfile, nginx.conf.
 
-## Quick start (Docker)
+## Production deploy (Docker)
 ```bash
-cd docker
-docker compose up -d
+# 1. Build the image (runs on any x86_64 Docker host)
+docker build -f docker/Dockerfile --target app -t ticket-sale:local .
+# 2. Create an env file outside git (see docker/ticket-sale.env.example) with strong DB passwords
+# 3. Start app + MySQL + Redis (only the app port is published)
+docker compose -p ticket-sale -f docker/docker-compose.yml --env-file /path/to/ticket-sale.env up -d
+# 4. Create the first owner account before exposing the site
+docker exec ticket-sale-app s6-setuidgid www-data php artisan user:create-owner <username> <email> "<Name>"
 ```
-- Frontend: http://localhost:8080
-- API: http://localhost:8080/api
-- Containers: `ticket-sale-app` (nginx+php-fpm), `ticket-sale-db` (mysql), `ticket-sale-redis` (redis).
-- On first start, migrates/seeds once; thereafter skipped (uses `/config/.provisioned`).
-- Runtime env knobs: `PUID`/`PGID` (default `1000`) remap `www-data` inside the container; `TZ` sets `/etc/localtime`.
-- Logs: nginx/PHP/system logs write to `/var/log`, which is bind-mounted to your host path (`/host/path/ticket-sale/logs` in the stock compose). Tail files there or keep using `docker compose logs`.
+- Put it behind an HTTPS reverse proxy that sets `X-Forwarded-Proto/Host` (private-network proxies are trusted by default, see `TRUSTED_PROXIES`). Set `APP_URL` and `SANCTUM_STATEFUL_DOMAINS` to the public host.
+- Migrations run on every container start; roles/permissions are seeded on first start.
+- Health: `GET /api/health` (checks the database; used by the container healthcheck).
+- Backups: `scripts/backup-db.sh` (cron it hourly; restore command inside the script).
+- Emergency: `php artisan user:reset-password <username>` (also re-activates the account).
 
-## Setup flow (first run)
-1) Open the SPA; setup wizard appears if no admin exists.
-2) DB defaults (compose): host `db`, database `ticket_sale`, user `ticket_user`, password `ticket_pass`.
-3) Create admin account, set optional SMTP + branding.
-4) Setup writes `.env` and locks it; setup endpoints then hard-deny.
+## Ticket workflow
+1. **Events** → create the event and a ticket type, then **Generate tickets**. Codes are random (`K7M3P-9QXR2`), not guessable.
+2. **Download… → Barcodes ZIP**: per ticket a print card (QR + CODE128 + code + number), plus QR-only and CODE128-only images and a CSV for mail merge.
+3. **Sell / assign** (Seller and up): scan or type the code and enter the guest name. A ticket must be sold/assigned before it can enter.
+4. **Door check-in** (Check-in, Manager, Admin; not Sellers): Zebra/USB scanners type into the field (Enter submits); phones use the **Camera** button (needs HTTPS). Results: ENTRY OK / ALREADY CHECKED IN / NOT SOLD / UNKNOWN.
+5. **Tickets** page: search by code, name or number; Managers can *Undo sale* for tickets not yet checked in.
+
+Roles: Viewer < Check-in < Seller < Event Manager < Admin < Site Owner. Admins only manage users below their own level; the site owner cannot be changed by admins.
+
+## Setup wizard (non-Docker installs)
+If no admin exists the SPA shows a setup wizard. With `SETUP_ENABLED=true` it also asks for DB credentials; with `false` the DB comes from the environment. It locks itself once an admin exists.
 
 ## Frontend dev
 ```bash
@@ -63,28 +73,16 @@ SMOKE_PORT=8082 IMAGE=ghcr.io/yourorg/ticket-sale:dev-latest make smoke-test
 ```
 
 See `docker/README.dev.md` for more detail on mounts, named volumes vs host bind mounts, and `nginx` vs `php artisan serve` options.
-## Features (current)
-- Role-based access (viewer/check-in/seller/event manager/admin, site owner immutable).
-- Ticket generation with CSV/PNG sheet/ZIP of per-ticket barcodes.
-- Sell/verify/check-in with scan history and double-sell/check-in guards.
-- Events, ticket types, user/role admin; comprehensive UI branding (logo, primary/secondary/background colors).
-- UI includes toast notifications for user feedback and modal dialogs for critical interactions.
-- Redis-backed sessions/cache (in Docker).
-- Health endpoint: `GET /api/health`.
+## Tests
+```bash
+make test   # builds the `test` image target and runs php artisan test (sqlite in memory)
+```
 
 ## CI/CD (GHCR)
-- Workflow: `.github/workflows/docker-publish.yml`
-- Image: `ghcr.io/<owner>/ticket-sale:latest`
-- Push on commits to `main/master` and tags `v*`/`release-*`.
+- Workflow: `.github/workflows/docker-publish.yml` (runs the backend tests, then builds and pushes)
+- Image: `ghcr.io/<owner>/ticket-sale:dev-latest`
+- Push on commits to `dev` and tags `v*`/`release-*`.
 - Requires no extra secrets; uses `GITHUB_TOKEN` to push to GHCR in the same org/user.
-
-## Production deploy
-1) Run `docker compose -f docker/docker-compose.yml up -d --build`.
-2) Browse to the app; the setup wizard appears by design.
-3) Complete setup (DB creds, admin user, optional SMTP/branding). The container seeds base roles/permissions automatically and runs migrations on start.
-4) Branding/settings are shared for all users and stored in the DB.
-
-> Note: The provided `docker-compose.yml` uses placeholder host bind paths for `/var/www/html/storage`, `/config`, and `/var/log`. Replace `/host/path/ticket-sale/{storage,config,logs}` with real paths on your host before deploying.
 
 ## phpMyAdmin (optional, manual run)
 ```bash

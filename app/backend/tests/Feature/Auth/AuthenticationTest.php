@@ -2,7 +2,6 @@
 
 namespace Tests\Feature\Auth;
 
-use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -10,38 +9,63 @@ class AuthenticationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_users_can_authenticate_using_the_login_screen(): void
+    protected function setUp(): void
     {
-        $user = User::factory()->create();
-
-        $response = $this->post('/login', [
-            'email' => $user->email,
-            'password' => 'password',
-        ]);
-
-        $this->assertAuthenticated();
-        $response->assertNoContent();
+        parent::setUp();
+        $this->seedRoles();
     }
 
-    public function test_users_can_not_authenticate_with_invalid_password(): void
+    public function test_users_can_log_in_with_username(): void
     {
-        $user = User::factory()->create();
+        $user = $this->userWithRole(2);
 
-        $this->post('/login', [
-            'email' => $user->email,
-            'password' => 'wrong-password',
-        ]);
+        $this->postJson('/api/login', ['username' => $user->username, 'password' => 'password'])
+            ->assertNoContent();
+
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_wrong_password_is_rejected(): void
+    {
+        $user = $this->userWithRole(2);
+
+        $this->postJson('/api/login', ['username' => $user->username, 'password' => 'nope'])
+            ->assertStatus(422);
 
         $this->assertGuest();
     }
 
-    public function test_users_can_logout(): void
+    public function test_inactive_users_cannot_log_in(): void
     {
-        $user = User::factory()->create();
+        $user = $this->userWithRole(2, ['active' => false]);
 
-        $response = $this->actingAs($user)->post('/logout');
+        $this->postJson('/api/login', ['username' => $user->username, 'password' => 'password'])
+            ->assertForbidden();
 
         $this->assertGuest();
-        $response->assertNoContent();
+    }
+
+    public function test_deactivated_user_loses_access_immediately(): void
+    {
+        $user = $this->userWithRole(2);
+        $this->actingAs($user)->getJson('/api/me')->assertOk();
+
+        $user->update(['active' => false]);
+
+        $this->actingAs($user->fresh())->getJson('/api/me')->assertUnauthorized();
+    }
+
+    public function test_registration_creates_inactive_seller(): void
+    {
+        $this->postJson('/api/register', [
+            'name' => 'New Person',
+            'email' => 'new@example.com',
+            'username' => 'newperson',
+            'password' => 'Secret-Password-1',
+            'password_confirmation' => 'Secret-Password-1',
+        ])->assertNoContent();
+
+        $this->assertDatabaseHas('users', ['username' => 'newperson', 'role_id' => 3, 'active' => false]);
+        $this->assertGuest();
     }
 }

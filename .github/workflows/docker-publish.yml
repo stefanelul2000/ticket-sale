@@ -28,6 +28,11 @@ jobs:
           echo "DATE_TAG=${DATE_TAG}" >> $GITHUB_ENV
           echo "VERSION_TAG=${DATE_TAG}-v${GITHUB_RUN_NUMBER}" >> $GITHUB_ENV
 
+      - name: Run backend tests
+        run: |
+          docker build -f docker/Dockerfile --target test -t ticket-sale:test .
+          docker run --rm ticket-sale:test
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -47,8 +52,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           # Optional: pass APP_URL for docs generation at build time
-          build-args: |
-            APP_URL=http://localhost:8080
+          target: app
 
       - name: Integration smoke test (healthcheck)
         run: |
@@ -77,9 +81,10 @@ jobs:
             -e DB_USERNAME=ticket_user \
             -e DB_PASSWORD=ticket_pass \
             -e CACHE_DRIVER=file \
+            -e CACHE_STORE=file \
             -e SESSION_DRIVER=file \
             -e QUEUE_CONNECTION=sync \
-            -e VITE_API_URL=http://localhost:8080/api \
+            -e SESSION_SECURE_COOKIE=false \
             ${{ env.IMAGE_NAME }}:dev-latest
 
           # Wait for health endpoint

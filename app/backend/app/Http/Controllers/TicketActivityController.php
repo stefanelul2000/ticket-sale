@@ -36,9 +36,11 @@ class TicketActivityController extends Controller
         return response()->json($logs);
     }
 
-    public function destroy()
+    public function destroy(Request $request)
     {
-        TicketActivityLog::truncate();
+        $count = TicketActivityLog::count();
+        TicketActivityLog::query()->delete();
+        $this->logAdminAction($request->user()?->id, 'ticket_activity.clear', ['entries' => $count]);
 
         return response()->json(['cleared' => true]);
     }

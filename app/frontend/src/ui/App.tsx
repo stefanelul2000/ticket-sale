@@ -7,7 +7,7 @@ import { SetupPage } from './pages/SetupPage';
 
 export function App() {
   const { primary, secondary, background, logoUrl, setTheme } = useTheme();
-  const [setupStatus, setSetupStatus] = useState<'checking' | 'needs' | 'ready'>('checking');
+  const [setupStatus, setSetupStatus] = useState<'checking' | 'needs' | 'ready' | 'unavailable'>('checking');
   const [setupMeta, setSetupMeta] = useState<{ skipDb: boolean }>({ skipDb: false });
 
   useEffect(() => {
@@ -44,9 +44,22 @@ export function App() {
         }
       })
       .catch(() => {
-        setSetupStatus('needs');
+        // Never fall back to the setup wizard on errors: the server is just unreachable.
+        setSetupStatus('unavailable');
       });
   }, []);
+
+  if (setupStatus === 'unavailable') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-slate-950 p-6 text-center text-white">
+        <p className="text-lg font-semibold">Service temporarily unavailable</p>
+        <p className="text-sm text-white/70">The server or its database is not reachable right now.</p>
+        <button className="rounded-lg bg-white/10 px-4 py-2 text-sm" onClick={() => window.location.reload()}>
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   if (setupStatus === 'checking') {
     return (

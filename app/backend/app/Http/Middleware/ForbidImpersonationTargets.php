@@ -11,16 +11,15 @@ class ForbidImpersonationTargets
     public function handle(Request $request, Closure $next)
     {
         $user = $request->user();
-        $targetId = $request->input('role_id');
+        $realRoleId = (int) ($request->attributes->get('original_role_id') ?? $user?->role_id ?? 0);
+        $targetId = (int) $request->input('role_id');
         $target = $targetId ? Role::find($targetId) : null;
 
-        // Must be logged in and admin/site-owner to impersonate
-        if (! $user || $user->role_id < 5) {
+        if (! $user || $realRoleId < 5) {
             abort(403, 'Not allowed to impersonate.');
         }
 
-        // Must target an existing role strictly below current
-        if (! $target || $target->id >= $user->role_id) {
+        if (! $target || $target->id >= $realRoleId) {
             abort(403, 'Cannot impersonate this role.');
         }
 

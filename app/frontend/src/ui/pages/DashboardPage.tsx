@@ -5,16 +5,21 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Input } from '../components/ui/Input';
 import { Spinner } from '../components/ui/Spinner';
+import { CameraScanner } from '../components/CameraScanner';
 import { api } from '../../lib/api';
+import { normalizeTicketCode } from '../../lib/ticketCode';
 
-type Ticket = {
+type TicketInfo = {
   id: number;
   ticket_number: number;
-  ticket_code?: string;
-  code?: string;
-  name?: string;
-  sold_at?: string;
+  ticket_code: string;
+  name?: string | null;
+  sold: boolean;
   checkin: boolean;
+  checked_in_at?: string | null;
+  checked_in_by?: string | null;
+  event?: { id: number; name: string } | null;
+  ticket_type?: { id: number; name: string; kind: string } | null;
 };
 
 type Stats = {
@@ -27,7 +32,7 @@ type Stats = {
 type HistoryItem = {
   id: number | string;
   ticket_code?: string | null;
-  action: 'verify' | 'checkin' | 'sell';
+  action: 'verify' | 'checkin' | 'sell' | 'refund';
   status: string;
   success: boolean;
   name?: string | null;
@@ -39,7 +44,44 @@ type HistoryItem = {
   } | null;
 };
 
+type ScanOutcome = {
+  tone: 'ok' | 'warn' | 'bad';
+  title: string;
+  detail?: string;
+  code: string;
+  ticket?: TicketInfo | null;
+};
+
 const MAX_HISTORY_ITEMS = 50;
+const AUTO_KEY = 'ts_auto_checkin';
+
+function feedback(tone: ScanOutcome['tone']) {
+  try {
+    navigator.vibrate?.(tone === 'ok' ? 120 : [80, 60, 80, 60, 200]);
+  } catch {
+    /* not supported */
+  }
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.value = tone === 'ok' ? 880 : 220;
+    gain.gain.value = 0.08;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + (tone === 'ok' ? 0.12 : 0.4));
+    osc.onended = () => ctx.close();
+  } catch {
+    /* audio blocked */
+  }
+}
+
+function describeTicket(t?: TicketInfo | null) {
+  if (!t) return undefined;
+  const parts = [t.name || 'No name', t.ticket_type?.name, t.event?.name, `#${t.ticket_number}`].filter(Boolean);
+  return parts.join(' · ');
+}
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -47,82 +89,72 @@ export function DashboardPage() {
   const canSell = roleId >= 3;
   const canCheckin = roleId >= 2 && roleId !== 3;
   const canSeeHistory = roleId >= 2;
+  const canClearHistory = roleId >= 5;
   const [stats, setStats] = useState<Stats | null>(null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [sellTicket, setSellTicket] = useState({ ticket: '', name: '' });
-  const [verifyNumber, setVerifyNumber] = useState('');
-  const [verifyResult, setVerifyResult] = useState<Ticket | null>(null);
-  const [autoCheckin, setAutoCheckin] = useState(false);
-  const [scanStatus, setScanStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [selling, setSelling] = useState(false);
+  const [codeInput, setCodeInput] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [outcome, setOutcome] = useState<ScanOutcome | null>(null);
+  const [autoCheckin, setAutoCheckin] = useState(() => localStorage.getItem(AUTO_KEY) !== '0');
+  const [cameraFor, setCameraFor] = useState<'door' | 'sell' | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
   const [clearingHistory, setClearingHistory] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const historyIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastActivityRef = useRef<number | string | null>(null);
-  const historyInitialLoadRef = useRef(false);
+  const sellNameRef = useRef<HTMLInputElement>(null);
+  const busyRef = useRef(false);
   const historyRef = useRef<HistoryItem[]>([]);
+  const historyInitialLoadRef = useRef(false);
+
   useEffect(() => {
     historyRef.current = history;
   }, [history]);
 
   useEffect(() => {
-    if (!user) return;
-    setLoadingStats(true);
-    api
-      .stats()
-      .then((res) => setStats(res))
-      .catch(() => {})
-      .finally(() => setLoadingStats(false));
-  }, [user]);
+    localStorage.setItem(AUTO_KEY, autoCheckin ? '1' : '0');
+  }, [autoCheckin]);
 
   const updateStats = useCallback(async () => {
-    if (!user) return;
+    if (!user || roleId < 2) return;
     try {
-      const res = await api.stats();
-      setStats(res);
+      setStats(await api.stats());
     } catch {
       /* ignore */
     }
-  }, [user]);
+  }, [user, roleId]);
+
+  useEffect(() => {
+    if (!user || roleId < 2) return;
+    setLoadingStats(true);
+    updateStats().finally(() => setLoadingStats(false));
+  }, [user, roleId, updateStats]);
 
   const loadHistory = useCallback(
     async (withSpinner = false) => {
-      if (withSpinner) {
-        setHistoryLoading(true);
-      }
+      if (withSpinner) setHistoryLoading(true);
       try {
         const data: HistoryItem[] = await api.ticketActivity();
         const prevHistory = historyRef.current;
         if (!historyInitialLoadRef.current || prevHistory.length === 0) {
           historyInitialLoadRef.current = true;
-          lastActivityRef.current = data[0]?.id ?? null;
           setHistory(data);
           return;
         }
-
         const currentTopId = prevHistory[0]?.id;
         const firstExistingIndex = data.findIndex((item) => item.id === currentTopId);
-        const newEntries =
-          firstExistingIndex === -1 ? data : data.slice(0, Math.max(0, firstExistingIndex));
-
-        if (newEntries.length === 0) {
-          return;
-        }
-
-        lastActivityRef.current = newEntries[0]?.id ?? lastActivityRef.current;
+        const newEntries = firstExistingIndex === -1 ? data : data.slice(0, Math.max(0, firstExistingIndex));
+        if (newEntries.length === 0) return;
         setHistory((prev) => [...newEntries, ...prev].slice(0, MAX_HISTORY_ITEMS));
-
-        if (newEntries.some((entry) => entry.action === 'sell' || entry.action === 'checkin')) {
+        if (newEntries.some((entry) => entry.action !== 'verify')) {
           updateStats();
         }
       } catch {
         /* ignore */
       } finally {
-        if (withSpinner) {
-          setHistoryLoading(false);
-        }
+        if (withSpinner) setHistoryLoading(false);
       }
     },
     [updateStats],
@@ -133,40 +165,27 @@ export function DashboardPage() {
       setHistory([]);
       historyRef.current = [];
       historyInitialLoadRef.current = false;
-      lastActivityRef.current = null;
-      setHistoryLoading(false);
-      if (historyIntervalRef.current) {
-        clearInterval(historyIntervalRef.current);
-        historyIntervalRef.current = null;
-      }
       return undefined;
     }
-
     loadHistory(true);
-    historyIntervalRef.current = setInterval(() => {
-      loadHistory();
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') loadHistory();
     }, 5000);
-
-    return () => {
-      if (historyIntervalRef.current) {
-        clearInterval(historyIntervalRef.current);
-        historyIntervalRef.current = null;
-      }
-    };
+    return () => clearInterval(interval);
   }, [canSeeHistory, loadHistory]);
 
   const clearHistory = async () => {
-    if (!canSeeHistory) return;
+    if (!canClearHistory) return;
+    if (!window.confirm('Clear the whole activity history for everyone?')) return;
     setClearingHistory(true);
     try {
       await api.clearTicketActivity();
       historyInitialLoadRef.current = false;
-      lastActivityRef.current = null;
       historyRef.current = [];
       setHistory([]);
       await loadHistory(true);
-    } catch {
-      /* ignore */
+    } catch (err: any) {
+      showToast(err?.response?.data?.message || 'Failed to clear history.');
     } finally {
       setClearingHistory(false);
     }
@@ -177,103 +196,112 @@ export function DashboardPage() {
     setTimeout(() => setToast((val) => (val === message ? null : val)), 4000);
   };
 
+  const refocus = () => setTimeout(() => inputRef.current?.focus(), 50);
+
   const handleSell = async () => {
-    if (!sellTicket.ticket || !user) return;
+    const ticket = normalizeTicketCode(sellTicket.ticket);
+    const name = sellTicket.name.trim();
+    if (!ticket || !user) return;
+    if (!name) {
+      showToast('Enter the guest / buyer name.');
+      sellNameRef.current?.focus();
+      return;
+    }
+    setSelling(true);
     try {
-      await api.sell(sellTicket.ticket, { name: sellTicket.name });
+      const sold: TicketInfo = await api.sell(ticket, { name });
       await updateStats();
       setSellTicket({ ticket: '', name: '' });
-      showToast('Ticket sold.');
-      loadHistory();
+      showToast(`Sold ${sold.ticket_code} to ${sold.name}.`);
+      feedback('ok');
     } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Failed to sell ticket.';
-      showToast(msg);
-      loadHistory();
-    }
-  };
-
-  const handleVerify = async (ticketCode?: string) => {
-    const target = ticketCode ?? verifyNumber;
-    if (!target || !user) return;
-    if (!target.includes('_')) {
-      showToast('Please scan/enter the full ticket code (e.g., 4_001).');
-      return;
-    }
-    try {
-      const res = await api.verify(target);
-      setVerifyResult(res);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Ticket not found.';
-      showToast(msg);
+      showToast(err?.response?.data?.message || 'Failed to sell ticket.');
+      feedback('bad');
     } finally {
-      loadHistory();
+      setSelling(false);
+      if (canSeeHistory) loadHistory();
     }
   };
 
-  const handleCheckin = async (ticketNumber?: string | number) => {
-    const target = ticketNumber !== undefined ? String(ticketNumber) : verifyNumber || null;
-    if (!target || !user) return;
-    if (!target.includes('_')) {
-      showToast('Please scan/enter the full ticket code (e.g., 4_001).');
-      if (autoCheckin) {
-        setScanStatus('error');
-        setVerifyNumber('');
-        setTimeout(() => setScanStatus('idle'), 1000);
-        inputRef.current?.focus();
-      }
-      return;
-    }
+  const runDoorAction = async (raw: string, mode: 'verify' | 'checkin') => {
+    const code = normalizeTicketCode(raw);
+    if (!code || !user || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
     try {
-      await api.checkin(target);
-      if (verifyResult && (verifyResult.ticket_code === target || String(verifyResult.ticket_number) === target)) {
-        setVerifyResult({ ...verifyResult, checkin: true });
-      }
-      await updateStats();
-      showToast('Checked in.');
-      if (autoCheckin) {
-        setScanStatus('success');
-        setVerifyNumber('');
-        setTimeout(() => setScanStatus('idle'), 1000);
-        inputRef.current?.focus();
+      if (mode === 'checkin') {
+        const res = await api.checkin(code);
+        setOutcome({ tone: 'ok', title: 'ENTRY OK', detail: describeTicket(res.ticket), code, ticket: res.ticket });
+        feedback('ok');
+        updateStats();
+      } else {
+        const t: TicketInfo = await api.verify(code);
+        const tone: ScanOutcome['tone'] = !t.sold ? 'bad' : t.checkin ? 'warn' : 'ok';
+        const title = !t.sold ? 'NOT SOLD' : t.checkin ? 'ALREADY CHECKED IN' : 'VALID';
+        setOutcome({ tone, title, detail: describeTicket(t), code, ticket: t });
+        feedback(tone);
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Failed to check in.';
-      showToast(msg);
-      if (autoCheckin) {
-        setScanStatus('error');
-        setVerifyNumber('');
-        setTimeout(() => setScanStatus('idle'), 1000);
-        inputRef.current?.focus();
-      }
+      const data = err?.response?.data ?? {};
+      const result = data.result as string | undefined;
+      const title =
+        result === 'already_checked_in'
+          ? 'ALREADY CHECKED IN'
+          : result === 'not_sold'
+            ? 'NOT SOLD — REFUSE'
+            : err?.response?.status === 404
+              ? 'UNKNOWN TICKET'
+              : 'ERROR';
+      const tone: ScanOutcome['tone'] = result === 'already_checked_in' ? 'warn' : 'bad';
+      const detail = [data.message || (err?.response ? undefined : 'Network error — check connection.'), describeTicket(data.ticket)]
+        .filter(Boolean)
+        .join(' — ');
+      setOutcome({ tone, title, detail, code, ticket: data.ticket });
+      feedback(tone);
     } finally {
-      loadHistory();
+      busyRef.current = false;
+      setBusy(false);
+      if (canSeeHistory) loadHistory();
+      refocus();
     }
   };
 
-  const submitTicketCode = (code?: string) => {
-    const value = (code ?? verifyNumber)?.trim();
+  const submitTicketCode = (raw?: string) => {
+    const value = (raw ?? codeInput).trim();
+    setCodeInput('');
     if (!value) return;
-
-    if (autoCheckin) {
-      handleCheckin(value);
-    } else {
-      handleVerify(value);
-    }
-    setVerifyNumber('');
+    runDoorAction(value, autoCheckin ? 'checkin' : 'verify');
   };
 
-  // 1. Direct handler for Key Down events
+  const onCameraCode = (raw: string) => {
+    if (cameraFor === 'sell') {
+      setSellTicket((prev) => ({ ...prev, ticket: normalizeTicketCode(raw) }));
+      setCameraFor(null);
+      feedback('ok');
+      setTimeout(() => sellNameRef.current?.focus(), 50);
+      return;
+    }
+    submitTicketCode(raw);
+  };
+
   const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
-      submitTicketCode(verifyNumber);
+      submitTicketCode(codeInput);
     }
   };
 
   const handleTicketFormSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    submitTicketCode(verifyNumber);
+    submitTicketCode(codeInput);
   };
+
+  const outcomeClass =
+    outcome?.tone === 'ok'
+      ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
+      : outcome?.tone === 'warn'
+        ? 'border-amber-400/60 bg-amber-500/20 text-amber-100'
+        : 'border-red-400/60 bg-red-500/25 text-red-100';
 
   return (
     <div className="space-y-6">
@@ -283,113 +311,165 @@ export function DashboardPage() {
           <p className="text-sm text-slate-400">Ticket operations and at-a-glance metrics.</p>
         </div>
         {toast && (
-          <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm text-blue-200 shadow">
-            {toast}
-          </div>
+          <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm text-blue-200 shadow">{toast}</div>
         )}
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {['Total', 'Sold', 'Unsold', 'Checked In'].map((label, index) => {
-          const key = ['total', 'sold', 'unsold', 'checked_in'][index] as keyof Stats;
-          return (
+      {roleId >= 2 && (
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {(
+            [
+              ['Total', 'total'],
+              ['Sold', 'sold'],
+              ['Unsold', 'unsold'],
+              ['Checked in', 'checked_in'],
+            ] as const
+          ).map(([label, key]) => (
             <Card key={label} className="bg-slate-900/80">
               <div className="text-sm uppercase tracking-wide text-slate-400">{label}</div>
-              <div className="text-3xl font-bold text-white">
-                {loadingStats ? <Spinner /> : stats ? stats[key] : '--'}
-              </div>
+              <div className="text-3xl font-bold text-white">{loadingStats ? <Spinner /> : stats ? stats[key] : '--'}</div>
             </Card>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
-          {canSell && (
-            <Card
-              title="Sell Ticket"
-              actions={
-                <Button onClick={handleSell} disabled={!sellTicket.ticket}>
-                  Sell
-                </Button>
-              }
-            >
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input
-                  label="Ticket #"
-                  value={sellTicket.ticket}
-                  onChange={(e) => setSellTicket((prev) => ({ ...prev, ticket: e.target.value }))}
-                />
-                <Input
-                  label="Buyer name"
-                  value={sellTicket.name}
-                  onChange={(e) => setSellTicket((prev) => ({ ...prev, name: e.target.value }))}
-                />
-              </div>
-            </Card>
-          )}
-
           {canCheckin && (
             <Card
-              title="Verify / Check-in"
+              title="Door check-in"
               actions={
-                <Button variant={autoCheckin ? 'primary' : 'ghost'} onClick={() => setAutoCheckin((prev) => !prev)}>
-                  Auto check-in {autoCheckin ? 'ON' : 'OFF'}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant={autoCheckin ? 'primary' : 'ghost'} onClick={() => setAutoCheckin((prev) => !prev)}>
+                    Auto check-in {autoCheckin ? 'ON' : 'OFF'}
+                  </Button>
+                  <Button variant="ghost" onClick={() => setCameraFor(cameraFor === 'door' ? null : 'door')}>
+                    {cameraFor === 'door' ? 'Hide camera' : 'Camera'}
+                  </Button>
+                </div>
               }
             >
               <form className="space-y-4" onSubmit={handleTicketFormSubmit}>
                 <Input
-                  label="Ticket code"
-                  value={verifyNumber}
+                  label={autoCheckin ? 'Scan ticket (checks in immediately)' : 'Scan ticket (verify only)'}
+                  value={codeInput}
                   name="ticket_code"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  autoFocus
+                  placeholder="e.g. K7M3P-9QXR2"
                   onChange={(e) => {
                     const raw = e.target.value;
                     if (raw.includes('\n') || raw.includes('\r')) {
-                      const cleaned = raw.replace(/[\r\n]+/g, '');
-                      setVerifyNumber(cleaned);
-                      submitTicketCode(cleaned);
+                      submitTicketCode(raw.replace(/[\r\n]+/g, ''));
                       return;
                     }
-                    setVerifyNumber(raw);
+                    setCodeInput(raw);
                   }}
-                  onKeyDown={handleKeyDown} // Attached listener here
+                  onKeyDown={handleKeyDown}
                   ref={inputRef}
                 />
-                
-                {/* We keep this as a backup */}
                 <button type="submit" className="hidden" aria-hidden="true" tabIndex={-1}>
                   Submit
                 </button>
-                
-                <div className="flex flex-wrap gap-4">
-                  <Button variant="primary" type="button" onClick={() => handleVerify()}>
-                    Verify
+
+                {cameraFor === 'door' && <CameraScanner onDetected={onCameraCode} onClose={() => setCameraFor(null)} paused={busy} />}
+
+                <div className="flex flex-wrap gap-3">
+                  <Button variant="ghost" type="button" onClick={() => runDoorAction(codeInput, 'verify')} disabled={busy || !codeInput}>
+                    Verify only
                   </Button>
-                  <Button variant="ghost" type="button" onClick={() => handleCheckin()}>
-                    Check-in
+                  <Button variant="primary" type="button" onClick={() => runDoorAction(codeInput, 'checkin')} disabled={busy || !codeInput}>
+                    Check in
                   </Button>
+                  {outcome?.tone === 'ok' && outcome.title === 'VALID' && !autoCheckin && (
+                    <Button variant="primary" type="button" onClick={() => runDoorAction(outcome.code, 'checkin')} disabled={busy}>
+                      Check in {outcome.code}
+                    </Button>
+                  )}
                 </div>
-                {verifyResult && (
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
-                    <p className="font-semibold">{verifyResult.name || `Ticket ${verifyResult.ticket_number}`}</p>
-                    <p>Status: {verifyResult.checkin ? 'Checked in' : 'Valid'}.</p>
+
+                {busy && (
+                  <div className="flex items-center gap-2 text-sm text-slate-300">
+                    <Spinner /> Checking…
                   </div>
                 )}
-                {autoCheckin && (
-                  <div
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                      scanStatus === 'success'
-                        ? 'bg-green-500/10 text-green-200'
-                        : scanStatus === 'error'
-                          ? 'bg-red-500/10 text-red-200'
-                          : 'bg-slate-800/60 text-slate-300'
-                    }`}
-                  >
-                    Auto mode: {scanStatus === 'idle' ? 'waiting for scan' : scanStatus}
+
+                {outcome && !busy && (
+                  <div className={`rounded-2xl border-2 p-5 ${outcomeClass}`} role="status" aria-live="assertive">
+                    <div className="text-3xl font-black tracking-wide">{outcome.title}</div>
+                    <div className="mt-1 font-mono text-lg">{outcome.code}</div>
+                    {outcome.detail && <div className="mt-2 text-base">{outcome.detail}</div>}
+                    {outcome.ticket?.checked_in_at && outcome.tone !== 'ok' && (
+                      <div className="mt-1 text-sm opacity-80">
+                        Checked in {new Date(outcome.ticket.checked_in_at).toLocaleTimeString()}
+                        {outcome.ticket.checked_in_by ? ` by ${outcome.ticket.checked_in_by}` : ''}
+                      </div>
+                    )}
                   </div>
                 )}
               </form>
+            </Card>
+          )}
+
+          {canSell && (
+            <Card
+              title="Sell / assign ticket"
+              actions={
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="ghost" onClick={() => setCameraFor(cameraFor === 'sell' ? null : 'sell')}>
+                    {cameraFor === 'sell' ? 'Hide camera' : 'Camera'}
+                  </Button>
+                  <Button onClick={handleSell} disabled={!sellTicket.ticket || selling}>
+                    {selling ? 'Selling…' : 'Sell'}
+                  </Button>
+                </div>
+              }
+            >
+              <div className="grid gap-4 md:grid-cols-2">
+                <Input
+                  label="Ticket code"
+                  value={sellTicket.ticket}
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  placeholder="Scan or type"
+                  onChange={(e) => {
+                    const raw = e.target.value;
+                    if (raw.includes('\n') || raw.includes('\r')) {
+                      setSellTicket((prev) => ({ ...prev, ticket: normalizeTicketCode(raw.replace(/[\r\n]+/g, '')) }));
+                      sellNameRef.current?.focus();
+                      return;
+                    }
+                    setSellTicket((prev) => ({ ...prev, ticket: raw }));
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      sellNameRef.current?.focus();
+                    }
+                  }}
+                />
+                <Input
+                  label="Guest / buyer name"
+                  value={sellTicket.name}
+                  ref={sellNameRef}
+                  onChange={(e) => setSellTicket((prev) => ({ ...prev, name: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleSell();
+                    }
+                  }}
+                />
+              </div>
+              {cameraFor === 'sell' && (
+                <div className="mt-4">
+                  <CameraScanner onDetected={onCameraCode} onClose={() => setCameraFor(null)} />
+                </div>
+              )}
             </Card>
           )}
         </div>
@@ -397,12 +477,14 @@ export function DashboardPage() {
         <Card
           title="Activity history"
           actions={
-            <Button variant="ghost" onClick={clearHistory} disabled={!canSeeHistory || clearingHistory || history.length === 0}>
-              {!canSeeHistory ? 'Insufficient role' : clearingHistory ? 'Clearing…' : 'Clear history'}
-            </Button>
+            canClearHistory ? (
+              <Button variant="ghost" onClick={clearHistory} disabled={clearingHistory || history.length === 0}>
+                {clearingHistory ? 'Clearing…' : 'Clear history'}
+              </Button>
+            ) : undefined
           }
         >
-          <div className="activity-scroll space-y-3 max-h-[360px] overflow-y-auto pr-1">
+          <div className="activity-scroll max-h-[480px] space-y-3 overflow-y-auto pr-1">
             {!canSeeHistory && <p className="text-sm text-slate-500">History is available to check-in roles.</p>}
             {canSeeHistory && historyLoading && history.length === 0 && <p className="text-sm text-slate-500">Loading history…</p>}
             {canSeeHistory && !historyLoading && history.length === 0 && <p className="text-sm text-slate-500">No recent actions yet.</p>}
@@ -411,9 +493,9 @@ export function DashboardPage() {
                 <div key={item.id} className="rounded-xl border border-slate-800/80 bg-slate-900/50 p-3 text-sm">
                   <div className="flex items-center justify-between text-xs text-slate-400">
                     <span>{new Date(item.created_at).toLocaleTimeString()}</span>
-                    <span>{item.action}</span>
+                    <span className="uppercase">{item.action}</span>
                   </div>
-                  <div className="text-base font-semibold text-white">{item.ticket_code ?? '—'}</div>
+                  <div className="font-mono text-base font-semibold text-white">{item.ticket_code ?? '—'}</div>
                   <div className={item.success ? 'text-emerald-300' : 'text-red-300'}>{item.status}</div>
                   {item.name && <div className="text-xs text-slate-400">Guest: {item.name}</div>}
                   {item.user && (

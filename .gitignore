@@ -26,3 +26,6 @@ GEMINI.md
 *~
 .aider*
 .vscode/
+
+# Runtime data (production deployment)
+/data/

@@ -23,18 +23,27 @@ type TicketType = {
   event_id: number;
 };
 
+type BundleTicket = {
+  ticket_code: string;
+  ticket_number: number;
+  ticket_type?: string | null;
+  name?: string | null;
+  sold?: boolean;
+};
+
 type Bundle = {
   eventId: number;
   eventName: string;
-  ticketTypeName: string;
-  codes: string[];
+  tickets: BundleTicket[];
 };
 
 type JsBarcodeModule = typeof import('jsbarcode');
 type JsZipModule = typeof import('jszip');
+type QrModule = typeof import('qrcode');
 
 let jsBarcodePromise: Promise<JsBarcodeModule> | null = null;
 let jsZipPromise: Promise<JsZipModule> | null = null;
+let qrPromise: Promise<QrModule> | null = null;
 
 const loadJsBarcode = async () => {
   if (!jsBarcodePromise) {
@@ -49,6 +58,72 @@ const loadJsZip = async () => {
   }
   return jsZipPromise;
 };
+
+const loadQr = async () => {
+  if (!qrPromise) {
+    qrPromise = import('qrcode').then((mod) => ((mod as any).default ?? mod) as QrModule);
+  }
+  return qrPromise;
+};
+
+const safeFileName = (value: string) => value.replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+|_+$/g, '') || 'event';
+
+const canvasToBlob = (canvas: HTMLCanvasElement) =>
+  new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encoding failed'))), 'image/png'));
+
+/** Print-quality images for one ticket: combined card, QR only, CODE128 only. */
+async function renderTicketImages(ticket: BundleTicket, eventName: string, pad: number) {
+  const [JsBarcode, QRCode] = await Promise.all([loadJsBarcode(), loadQr()]);
+
+  const qr = document.createElement('canvas');
+  await QRCode.toCanvas(qr, ticket.ticket_code, { errorCorrectionLevel: 'M', margin: 2, width: 600, color: { dark: '#000000', light: '#ffffff' } });
+
+  const bar = document.createElement('canvas');
+  JsBarcode(bar, ticket.ticket_code, {
+    format: 'CODE128',
+    width: 4,
+    height: 180,
+    margin: 24,
+    displayValue: true,
+    font: 'monospace',
+    fontOptions: 'bold',
+    fontSize: 40,
+    textMargin: 8,
+    background: '#ffffff',
+    lineColor: '#000000',
+  });
+
+  // Combined card: QR left, CODE128 + text right. 1800x700 px (~6x2.3 in at 300 dpi).
+  const card = document.createElement('canvas');
+  card.width = 1800;
+  card.height = 700;
+  const ctx = card.getContext('2d')!;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, card.width, card.height);
+  ctx.drawImage(qr, 40, 50, 600, 600);
+
+  const rightX = 700;
+  const rightW = card.width - rightX - 40;
+  const barScale = Math.min(1, rightW / bar.width);
+  const barW = bar.width * barScale;
+  const barH = bar.height * barScale;
+  ctx.drawImage(bar, rightX + (rightW - barW) / 2, 60, barW, barH);
+
+  ctx.fillStyle = '#000000';
+  ctx.textBaseline = 'top';
+  ctx.font = 'bold 44px sans-serif';
+  const number = `#${String(ticket.ticket_number).padStart(pad, '0')}`;
+  ctx.fillText(number + (ticket.ticket_type ? `  ·  ${ticket.ticket_type}` : ''), rightX, 60 + barH + 50, rightW);
+  ctx.font = '36px sans-serif';
+  ctx.fillStyle = '#333333';
+  ctx.fillText(eventName, rightX, 60 + barH + 115, rightW);
+
+  return {
+    combined: await canvasToBlob(card),
+    qr: await canvasToBlob(qr),
+    code128: await canvasToBlob(bar),
+  };
+}
 
 export function EventsIndexPage() {
   const roleId = useRoleId();
@@ -202,8 +277,8 @@ export function EventsIndexPage() {
         ticket_type_id: Number(state.ticket_type_id),
         count: Number(state.count),
       };
-      await api.generate(payload);
-      showToast('Tickets generated.');
+      const res = await api.generate(payload);
+      showToast(`Generated ${res.generated} tickets (#${res.start}–#${res.end}).`);
       setGenerateState((prev) => ({ ...prev, [event.id]: { ticket_type_id: '', count: '' } }));
       await loadEvents();
     } catch (err: any) {
@@ -213,24 +288,19 @@ export function EventsIndexPage() {
     }
   };
 
-  const createBundle = (event: EventType, ticketTypeName: string, codes: string[]): Bundle => ({
-    eventId: event.id,
-    eventName: event.name,
-    ticketTypeName,
-    codes,
-  });
+  const [zipProgress, setZipProgress] = useState<{ done: number; total: number } | null>(null);
 
   const loadTicketsForEvent = async (event: EventType) => {
     setLoading(`load-codes-${event.id}`);
     try {
       const res = await api.eventTickets(event.id);
-      const codes: string[] = res?.codes || [];
-      if (!codes.length) {
-        showToast('No tickets available.');
+      const tickets: BundleTicket[] = res?.tickets || [];
+      if (!tickets.length) {
+        showToast('No tickets generated for this event yet.');
         return;
       }
-      setBundle(createBundle(event, 'All ticket types', codes));
-      showToast('Tickets loaded for download.');
+      setBundle({ eventId: event.id, eventName: event.name, tickets });
+      showToast(`${tickets.length} tickets ready for download.`);
     } catch (err: any) {
       showToast(err?.response?.data?.message ?? 'Failed to load tickets.');
     } finally {
@@ -238,57 +308,91 @@ export function EventsIndexPage() {
     }
   };
 
-  const downloadCsv = (target: Bundle) => {
-    const rows = ['ticket_code,event_id,ticket_type,count'];
-    target.codes.forEach((code) => rows.push(`${code},${target.eventId},"${target.ticketTypeName}",1`));
-    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${target.eventName}-tickets.csv`;
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
     link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
   };
 
-  const barcodeDataUrl = async (code: string) => {
-    const JsBarcode = await loadJsBarcode();
-    const canvas = document.createElement('canvas');
-    JsBarcode(canvas, code, { format: 'CODE128', width: 3, height: 90, margin: 12, displayValue: true });
-    return canvas.toDataURL('image/png');
+  const csvCell = (value: unknown) => {
+    const text = value === null || value === undefined ? '' : String(value);
+    // Quote everything; neutralise spreadsheet formulas.
+    const safe = /^[=+\-@]/.test(text) ? `'${text}` : text;
+    return `"${safe.replace(/"/g, '""')}"`;
   };
 
-  const dataUrlToUint8 = (url: string) => {
-    const base64 = url.split(',')[1];
-    const binary = atob(base64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) {
-      bytes[i] = binary.charCodeAt(i);
-    }
-    return bytes;
+  const padFor = (target: Bundle) => Math.max(3, String(Math.max(...target.tickets.map((t) => t.ticket_number))).length);
+
+  const fileBase = (target: Bundle, t: BundleTicket) => `${String(t.ticket_number).padStart(padFor(target), '0')}_${t.ticket_code}`;
+
+  const downloadCsv = (target: Bundle) => {
+    const pad = padFor(target);
+    const rows = [['ticket_number', 'ticket_code', 'ticket_type', 'event', 'name', 'sold', 'image_file'].map(csvCell).join(',')];
+    target.tickets.forEach((t) =>
+      rows.push(
+        [String(t.ticket_number).padStart(pad, '0'), t.ticket_code, t.ticket_type ?? '', target.eventName, t.name ?? '', t.sold ? 'yes' : 'no', `${fileBase(target, t)}.png`]
+          .map(csvCell)
+          .join(','),
+      ),
+    );
+    // BOM so Excel opens UTF-8 (diacritics) correctly.
+    downloadBlob(new Blob(['\ufeff' + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' }), `${safeFileName(target.eventName)}-tickets.csv`);
   };
 
   const downloadBarcodesZip = async (target: Bundle) => {
-    const subset = target.codes.slice(0, 500);
-    if (!subset.length) {
-      showToast('No tickets selected for barcodes.');
+    if (!target.tickets.length) {
+      showToast('No tickets to export.');
       return;
     }
     setLoading('zip-barcodes');
+    setZipProgress({ done: 0, total: target.tickets.length });
     try {
       const JSZip = await loadJsZip();
       const zip = new JSZip();
-      for (const code of subset) {
-        const dataUrl = await barcodeDataUrl(code);
-        const bytes = dataUrlToUint8(dataUrl);
-        zip.file(`${code}.png`, bytes, { binary: true });
+      const pad = padFor(target);
+      let done = 0;
+      for (const t of target.tickets) {
+        const images = await renderTicketImages(t, target.eventName, pad);
+        const base = fileBase(target, t);
+        zip.file(`tickets/${base}.png`, images.combined);
+        zip.file(`qr/${base}.png`, images.qr);
+        zip.file(`code128/${base}.png`, images.code128);
+        done += 1;
+        if (done % 10 === 0 || done === target.tickets.length) {
+          setZipProgress({ done, total: target.tickets.length });
+          await new Promise((r) => setTimeout(r, 0)); // keep the UI responsive
+        }
       }
-      const blob = await zip.generateAsync({ type: 'blob' });
-      const link = document.createElement('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = `${target.eventName}-barcodes.zip`;
-      link.click();
-      if (target.codes.length > subset.length) {
-        showToast(`Zipped first ${subset.length} barcodes. Use CSV for full list.`);
-      }
+      const pad2 = (n: number) => String(n).padStart(pad, '0');
+      const manifest = [['ticket_number', 'ticket_code', 'ticket_type', 'file'].map(csvCell).join(',')];
+      target.tickets.forEach((t) => manifest.push([pad2(t.ticket_number), t.ticket_code, t.ticket_type ?? '', `${fileBase(target, t)}.png`].map(csvCell).join(',')));
+      zip.file('tickets.csv', '\ufeff' + manifest.join('\r\n'));
+      zip.file(
+        'README.txt',
+        [
+          `Event: ${target.eventName}`,
+          `Tickets: ${target.tickets.length}`,
+          '',
+          'tickets/  - print-ready card: QR code + CODE128 barcode + code + ticket number (1800x700 px, ~6x2.3 in at 300 dpi)',
+          'qr/       - QR code only (600x600 px)',
+          'code128/  - CODE128 barcode only, with the code printed below',
+          'tickets.csv - list of codes and image file names for mail merge',
+          '',
+          'Every ticket must be SOLD/ASSIGNED in the app before it can be checked in at the door.',
+        ].join('\r\n'),
+      );
+      const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
+      downloadBlob(blob, `${safeFileName(target.eventName)}-barcodes.zip`);
+      showToast(`ZIP with ${target.tickets.length} tickets downloaded.`);
+    } catch (err: any) {
+      showToast(`Barcode export failed: ${err?.message ?? 'unknown error'}`);
     } finally {
+      setZipProgress(null);
       setLoading(null);
     }
   };
@@ -519,18 +623,21 @@ export function EventsIndexPage() {
           </Card>
 
           {bundle && (
-            <Card title={`Download tickets for ${bundle.eventName}`}>
+            <Card title={`Download tickets for ${bundle.eventName} (${bundle.tickets.length})`}>
               <div className="flex flex-wrap gap-3">
-                <Button variant="primary" onClick={() => downloadCsv(bundle)}>
-                  CSV
+                <Button variant="primary" onClick={() => downloadBarcodesZip(bundle)} disabled={isLoading('zip-barcodes')}>
+                  Barcodes ZIP (PNG)
                 </Button>
-                <Button variant="ghost" onClick={() => downloadBarcodesZip(bundle)} disabled={isLoading('zip-barcodes')}>
-                  Barcodes ZIP
+                <Button variant="ghost" onClick={() => downloadCsv(bundle)}>
+                  CSV
                 </Button>
                 <Button variant="ghost" onClick={() => setBundle(null)}>
                   Clear selection
                 </Button>
               </div>
+              <p className="mt-3 text-xs text-slate-400">
+                Each PNG has a QR code and a CODE128 barcode with the same code, so both Zebra scanners and phone cameras can read it.
+              </p>
             </Card>
           )}
         </div>
@@ -692,9 +799,14 @@ export function EventsIndexPage() {
       )}
 
       {loadingKey && (
-        <div className="fixed inset-0 flex items-center justify-center bg-slate-950/60">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60">
           <div className="rounded-2xl bg-slate-900/90 p-6 text-center">
             <Spinner size="lg" />
+            {zipProgress && (
+              <p className="mt-3 text-sm text-slate-200">
+                Rendering barcodes {zipProgress.done} / {zipProgress.total}
+              </p>
+            )}
           </div>
         </div>
       )}

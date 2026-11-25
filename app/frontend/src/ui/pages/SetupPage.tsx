@@ -112,10 +112,14 @@ export function SetupPage({ onSuccess, skipDb = false }: { onSuccess: () => void
     setStepErrors({});
     try {
       await api.setup({
-        db_host: dbForm.host,
-        db_name: dbForm.name,
-        db_user: dbForm.user,
-        db_password: dbForm.password,
+        ...(skipDb
+          ? {}
+          : {
+              db_host: dbForm.host,
+              db_name: dbForm.name,
+              db_user: dbForm.user,
+              db_password: dbForm.password,
+            }),
         name: adminForm.name,
         email: adminForm.email,
         username: adminForm.username,
