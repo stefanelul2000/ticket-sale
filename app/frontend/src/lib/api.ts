@@ -107,6 +107,14 @@ export const api = {
     client.get(`/events/${eventId}/tickets`, { params: ticket_type_id ? { ticket_type_id } : undefined }).then((r) => r.data),
   assignList: (eventId: number, payload: { ticket_type_id: number; generate_missing: boolean; entries: { name: string; guest_category?: string | null }[] }) =>
     client.post(`/events/${eventId}/assign-list`, payload).then((r) => r.data),
+  uploadTemplate: (eventId: number, image: Blob, filename: string) => {
+    const form = new FormData();
+    form.append('image', image, filename);
+    return client.post(`/events/${eventId}/template`, form).then((r) => r.data);
+  },
+  saveTemplate: (eventId: number, payload: { width_mm: number; elements: unknown[] }) =>
+    client.put(`/events/${eventId}/template`, payload).then((r) => r.data),
+  deleteTemplate: (eventId: number) => client.delete(`/events/${eventId}/template`).then((r) => r.data),
   walkIn: (eventId: number, payload: { name?: string; guest_category?: string | null }) =>
     client.post(`/events/${eventId}/walk-in`, payload).then((r) => r.data),
 

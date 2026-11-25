@@ -38,5 +38,8 @@
   "Server Error": "Eroare de server",
   "Not Found": "Nu a fost găsit",
   "Forbidden": "Acces interzis",
-  "Only the volunteer who assigned this invitation (or a manager) can change it.": "Doar voluntarul care a atribuit invitația (sau un manager) o poate modifica."
+  "Only the volunteer who assigned this invitation (or a manager) can change it.": "Doar voluntarul care a atribuit invitația (sau un manager) o poate modifica.",
+  "The file is not a valid image.": "Fișierul nu este o imagine validă.",
+  "Image size must be between :min and :max pixels per side.": "Imaginea trebuie să aibă între :min și :max pixeli pe latură.",
+  "Upload the invitation design first.": "Încarcă mai întâi designul invitației."
 }

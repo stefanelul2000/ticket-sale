@@ -8,6 +8,36 @@ export type TicketTypeT = {
   sort?: number;
 };
 
+export type TemplateElementType = 'qr' | 'barcode' | 'number' | 'name' | 'code';
+
+export type TemplateElement = {
+  id: string;
+  type: TemplateElementType;
+  /** Position and size relative to the design (0..1). */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color?: string | null;
+  background?: 'none' | 'white' | null;
+  align?: 'left' | 'center' | 'right' | null;
+  font?: 'sans' | 'display' | 'mono' | null;
+  bold?: boolean | null;
+  uppercase?: boolean | null;
+  prefix?: string | null;
+  digits?: number | null;
+  qr_content?: 'ticket' | 'photos' | 'event' | null;
+  show_text?: boolean | null;
+};
+
+export type PrintTemplate = {
+  image_url: string;
+  width_px: number;
+  height_px: number;
+  width_mm: number;
+  elements: TemplateElement[];
+};
+
 export type EventT = {
   id: number;
   name: string;
@@ -21,6 +51,7 @@ export type EventT = {
   is_public?: boolean;
   donation_url?: string | null;
   photos_url?: string | null;
+  print_template?: PrintTemplate | null;
   ticket_types_count?: number;
   tickets_generated?: number;
   tickets_sold?: number;

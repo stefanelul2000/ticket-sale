@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\ImpersonationController;
+use App\Http\Controllers\PrintTemplateController;
 use App\Http\Controllers\PublicController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingsController;
@@ -70,6 +71,9 @@ Route::middleware(['auth:sanctum', 'active', 'impersonate'])->group(function () 
         Route::post('/events/{eventId}/duplicate', [EventController::class, 'duplicate'])->whereNumber('eventId');
         Route::get('/events/{event}/tickets', [TicketController::class, 'export'])->whereNumber('event');
         Route::post('/events/{eventId}/assign-list', [TicketController::class, 'assignList'])->whereNumber('eventId');
+        Route::post('/events/{eventId}/template', [PrintTemplateController::class, 'upload'])->whereNumber('eventId');
+        Route::put('/events/{eventId}/template', [PrintTemplateController::class, 'update'])->whereNumber('eventId');
+        Route::delete('/events/{eventId}/template', [PrintTemplateController::class, 'destroy'])->whereNumber('eventId');
 
         Route::get('/ticket-types', [TicketTypeController::class, 'index']);
         Route::post('/ticket-types', [TicketTypeController::class, 'store']);

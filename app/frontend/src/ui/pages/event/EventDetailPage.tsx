@@ -13,11 +13,12 @@ import { EventReportView } from '../../components/EventReportView';
 import { IconExternal } from '../../components/Icons';
 import { GuestsTab } from './GuestsTab';
 import { PrintTab } from './PrintTab';
+import { DesignTab } from './DesignTab';
 import { TypesTab } from './TypesTab';
 import { SettingsTab } from './SettingsTab';
 
-type Tab = 'overview' | 'guests' | 'print' | 'types' | 'settings';
-const TABS: Tab[] = ['overview', 'guests', 'print', 'types', 'settings'];
+type Tab = 'overview' | 'guests' | 'print' | 'design' | 'types' | 'settings';
+const TABS: Tab[] = ['overview', 'guests', 'print', 'design', 'types', 'settings'];
 
 export function EventDetailPage() {
   const t = useT();
@@ -78,8 +79,9 @@ export function EventDetailPage() {
         onChange={(v) => setParams(v === 'overview' ? {} : { tab: v }, { replace: true })}
         items={[
           { value: 'overview', label: t('tab.overview') },
-          { value: 'guests', label: t('tab.guests'), count: event.tickets_sold },
-          { value: 'print', label: t('tab.print'), count: event.tickets_generated },
+          { value: 'guests', label: t('tab.guests'), count: event.tickets_generated },
+          { value: 'print', label: t('tab.print') },
+          { value: 'design', label: t('tab.design') },
           { value: 'types', label: t('tab.types'), count: event.ticket_types?.length },
           { value: 'settings', label: t('tab.settings') },
         ]}
@@ -87,6 +89,7 @@ export function EventDetailPage() {
       {tab === 'overview' && <EventReportView eventId={event.id} />}
       {tab === 'guests' && <GuestsTab event={event} onChanged={reload} />}
       {tab === 'print' && <PrintTab event={event} onChanged={reload} />}
+      {tab === 'design' && <DesignTab event={event} onChanged={reload} />}
       {tab === 'types' && <TypesTab event={event} onChanged={reload} />}
       {tab === 'settings' && <SettingsTab event={event} onChanged={reload} />}
     </div>

@@ -17,6 +17,10 @@ return Application::configure(basePath: dirname(__DIR__))
         // adds CSRF protection to those requests). Other callers get no session.
         $middleware->statefulApi();
         $middleware->prependToGroup('api', \App\Http\Middleware\SetLocale::class);
+        // Invitation designs keep spaces in prefixes ("Nr. "); everything else is trimmed.
+        $middleware->trimStrings(except: [
+            fn (Request $request) => $request->is('api/events/*/template'),
+        ]);
 
         // Behind SWAG / Cloudflare: honour X-Forwarded-* from private-network proxies.
         $proxies = env('TRUSTED_PROXIES', '10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1');

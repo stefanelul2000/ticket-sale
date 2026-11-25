@@ -181,4 +181,24 @@ class EventFeaturesTest extends TestCase
         $this->actingAs($this->userWithRole(4))->getJson('/api/reports/repeat-guests')
             ->assertOk()->assertJsonCount(1)->assertJson([['events_count' => 2]]);
     }
+
+    public function test_ticket_list_filters_and_sorts(): void
+    {
+        [$event, $type] = $this->eventWithType();
+        $codes = $this->generate($event, $type->id, 4);
+        $vol = $this->userWithRole(3);
+        $this->actingAs($vol)->postJson("/api/tickets/{$codes[2]}/sell", ['event_id' => $event->id, 'name' => 'Zoe']);
+        $this->actingAs($vol)->postJson("/api/tickets/{$codes[3]}/sell", ['event_id' => $event->id, 'name' => 'Ana']);
+        $manager = $this->userWithRole(4);
+
+        $all = $this->actingAs($manager)->getJson("/api/tickets?event_id={$event->id}")->assertOk();
+        $this->assertSame(4, $all->json('total'));
+        $this->assertSame($vol->name, collect($all->json('data'))->firstWhere('name', 'Zoe')['seller']['name']);
+
+        $byName = $this->actingAs($manager)->getJson("/api/tickets?event_id={$event->id}&sort=name")->json('data');
+        $this->assertSame(['Ana', 'Zoe'], [$byName[0]['name'], $byName[1]['name']]);
+
+        $this->actingAs($manager)->getJson("/api/tickets?event_id={$event->id}&status=unassigned")->assertJsonPath('total', 2);
+        $this->actingAs($manager)->getJson("/api/tickets?event_id={$event->id}&sort=drop")->assertStatus(422);
+    }
 }

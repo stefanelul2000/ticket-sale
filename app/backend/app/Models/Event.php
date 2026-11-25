@@ -51,6 +51,7 @@ class Event extends Model
         'capacity',
         'donation_url',
         'photos_url',
+        'print_template',
         'branding',
         'seo',
     ];
@@ -58,6 +59,7 @@ class Event extends Model
     protected $casts = [
         'is_online' => 'boolean',
         'is_public' => 'boolean',
+        'print_template' => 'array',
         'starts_at' => 'datetime',
         'ends_at' => 'datetime',
         'branding' => 'array',

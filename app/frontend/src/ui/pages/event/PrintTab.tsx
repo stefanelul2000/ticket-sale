@@ -6,6 +6,11 @@ import { GUEST_CATEGORIES, categoryKey } from '../../../lib/constants';
 import { fmtNumber, fmtTime, fmtWeekdayDate } from '../../../lib/format';
 import { ticketUrl } from '../../../lib/ticketCode';
 import { csvBlob, downloadBlob, prepareFonts, renderTicketImages, safeFileName } from '../../../lib/ticketPrint';
+import { canvasBlob, renderOverlays, renderTemplateCanvas } from '../../../lib/templateRender';
+import type { TemplateContext } from '../../../lib/templateRender';
+import { buildTemplatePdf } from '../../../lib/pdfExport';
+import type { PdfLayout } from '../../../lib/pdfExport';
+import { Link } from 'react-router-dom';
 import type { PrintContext, PrintTicket } from '../../../lib/ticketPrint';
 import { useSettings } from '../../../state/useSettings';
 import { toast } from '../../../state/useToast';
@@ -70,6 +75,10 @@ export function PrintTab({ event, onChanged }: { event: EventT; onChanged: () =>
   const [scope, setScope] = useState<'all' | 'unassigned' | 'assigned'>('all');
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  const tpl = event.print_template && event.print_template.elements?.length ? event.print_template : null;
+  const [design, setDesign] = useState<'custom' | 'standard'>(tpl ? 'custom' : 'standard');
+  const useCustom = design === 'custom' && !!tpl;
+  const templateCtx: TemplateContext = { publicUrl: settings.public_url || window.location.origin, eventSlug: event.slug, photosUrl: event.photos_url };
 
   useEffect(() => {
     if (!loaded) loadSettings();
@@ -99,16 +108,16 @@ export function PrintTab({ event, onChanged }: { event: EventT; onChanged: () =>
     (async () => {
       await prepareFonts();
       const sample: ExportTicket = { ticket_code: 'K7M3P-9QXR2', ticket_number: 1, name: t('print.sampleName'), ticket_type: types[0]?.name };
-      const imgs = await renderTicketImages(sample, printContext());
+      const blob = useCustom ? await canvasBlob(await renderTemplateCanvas(tpl!, sample, templateCtx), 'image/jpeg', 0.85) : (await renderTicketImages(sample, printContext())).combined;
       if (!alive) return;
-      url = URL.createObjectURL(imgs.combined);
+      url = URL.createObjectURL(blob);
       setPreview(url);
     })();
     return () => {
       alive = false;
       if (url) URL.revokeObjectURL(url);
     };
-  }, [event.id, event.name, event.starts_at, event.venue, settings.public_url, settings.name, t]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [event.id, event.name, event.starts_at, event.venue, settings.public_url, settings.name, t, useCustom, tpl]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const doGenerate = async () => {
     const n = Number(count);
@@ -179,10 +188,14 @@ export function PrintTab({ event, onChanged }: { event: EventT; onChanged: () =>
       let done = 0;
       for (const x of tickets) {
         const base = `${String(x.ticket_number).padStart(pad, '0')}_${x.ticket_code}`;
-        const imgs = await renderTicketImages(x, ctx);
-        zip.file(`${t('print.folderCards')}/${base}.png`, imgs.combined);
-        zip.file(`qr/${base}.png`, imgs.qr);
-        zip.file(`code128/${base}.png`, imgs.code128);
+        if (useCustom) {
+          zip.file(`${t('print.folderCards')}/${base}.png`, await canvasBlob(await renderTemplateCanvas(tpl!, x, templateCtx)));
+        } else {
+          const imgs = await renderTicketImages(x, ctx);
+          zip.file(`${t('print.folderCards')}/${base}.png`, imgs.combined);
+          zip.file(`qr/${base}.png`, imgs.qr);
+          zip.file(`code128/${base}.png`, imgs.code128);
+        }
         done += 1;
         if (done % 10 === 0 || done === tickets.length) {
           setProgress({ done, total: tickets.length });
@@ -206,6 +219,27 @@ export function PrintTab({ event, onChanged }: { event: EventT; onChanged: () =>
       const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
       downloadBlob(blob, `${safeFileName(event.name)}-invitatii.zip`);
       toast(t('print.zipDone', { n: tickets.length }), 'ok');
+    } catch (err) {
+      toast(errorMessage(err, t('common.error')), 'danger');
+    } finally {
+      setProgress(null);
+    }
+  };
+
+  const downloadPdf = async (layout: PdfLayout) => {
+    if (!tpl) return;
+    try {
+      const tickets = await fetchTickets();
+      if (!tickets.length) {
+        toast(t('print.nothing'), 'warn');
+        return;
+      }
+      setProgress({ done: 0, total: tickets.length });
+      await prepareFonts();
+      await renderOverlays(tpl, tickets[0], templateCtx); // warm up libraries
+      const blob = await buildTemplatePdf(tpl, tickets, templateCtx, layout, (done, total) => setProgress({ done, total }));
+      downloadBlob(blob, `${safeFileName(event.name)}-invitatii${layout === 'a4' ? '-A4' : ''}.pdf`);
+      toast(t('print.pdfDone', { n: tickets.length }), 'ok');
     } catch (err) {
       toast(errorMessage(err, t('common.error')), 'danger');
     } finally {
@@ -285,13 +319,34 @@ export function PrintTab({ event, onChanged }: { event: EventT; onChanged: () =>
 
       <Card title={t('print.downloadTitle')} subtitle={t('print.downloadHint')}>
         {preview && <img src={preview} alt={t('print.preview')} className="mb-4 w-full rounded-lg border border-line" />}
+        {tpl ? (
+          <Select label={t('print.design')} value={design} onChange={(e) => setDesign(e.target.value as typeof design)} wrapperClassName="mb-4">
+            <option value="custom">{t('print.designCustom')}</option>
+            <option value="standard">{t('print.designStandard')}</option>
+          </Select>
+        ) : (
+          <p className="mb-4 rounded-lg bg-surface2 p-3 text-sm text-soft">
+            {t('print.noCustom')}{' '}
+            <Link to={`/events/${event.id}?tab=design`} className="font-semibold text-accent hover:underline">{t('print.openDesigner')}</Link>
+          </p>
+        )}
         <Select label={t('print.scope')} value={scope} onChange={(e) => setScope(e.target.value as typeof scope)}>
           <option value="all">{t('print.scopeAll')}</option>
           <option value="unassigned">{t('print.scopeUnassigned')}</option>
           <option value="assigned">{t('print.scopeAssigned')}</option>
         </Select>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button onClick={() => downloadZip()} loading={!!progress}>
+          {useCustom && (
+            <>
+              <Button onClick={() => downloadPdf('single')} loading={!!progress}>
+                <IconDownload size={16} /> {t('print.pdfSingle')}
+              </Button>
+              <Button variant="secondary" onClick={() => downloadPdf('a4')} loading={!!progress}>
+                <IconDownload size={16} /> {t('print.pdfA4')}
+              </Button>
+            </>
+          )}
+          <Button variant={useCustom ? 'secondary' : 'primary'} onClick={() => downloadZip()} loading={!!progress}>
             <IconDownload size={16} /> {t('print.zip')}
           </Button>
           <Button variant="secondary" onClick={downloadCsv}>

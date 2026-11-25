@@ -141,11 +141,20 @@ class EventController extends Controller
             ], 409);
         }
 
+        $templateImage = $event->print_template['image_path'] ?? null;
+
         DB::transaction(function () use ($event) {
             $event->tickets()->withTrashed()->forceDelete();
             $event->ticketTypes()->withTrashed()->forceDelete();
             $event->forceDelete();
         });
+        if ($templateImage && str_starts_with($templateImage, 'templates/')) {
+            $stillUsed = Event::withTrashed()->whereNotNull('print_template')->get(['id', 'print_template'])
+                ->contains(fn (Event $e) => ($e->print_template['image_path'] ?? null) === $templateImage);
+            if (! $stillUsed) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($templateImage);
+            }
+        }
         $this->logAdminAction($request->user()?->id, 'event.delete', ['event_id' => $eventId, 'name' => $event->name]);
 
         return response()->json(['deleted' => true]);

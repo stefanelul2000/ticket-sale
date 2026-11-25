@@ -24,6 +24,7 @@ class TicketController extends Controller
             'category' => ['nullable', 'string', 'max:32'],
             'search' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:2000'],
+            'sort' => ['nullable', 'in:number,name,assigned,checked_in'],
         ]);
 
         $query = Ticket::with(['event:id,name', 'ticketType:id,name,kind', 'seller:id,name,username', 'checkedInBy:id,name'])
@@ -51,8 +52,14 @@ class TicketController extends Controller
                     }
                 });
             })
-            ->orderBy('event_id')
-            ->orderBy('ticket_number');
+            ->orderBy('event_id');
+
+        match ($request->get('sort', 'number')) {
+            'name' => $query->orderByRaw('name is null')->orderBy('name')->orderBy('ticket_number'),
+            'assigned' => $query->orderByRaw('sold_at is null')->orderByDesc('sold_at')->orderBy('ticket_number'),
+            'checked_in' => $query->orderByRaw('checked_in_at is null')->orderByDesc('checked_in_at')->orderBy('ticket_number'),
+            default => $query->orderBy('ticket_number'),
+        };
 
         return $query->paginate((int) $request->get('per_page', 50));
     }
