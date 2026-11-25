@@ -1,6 +1,6 @@
 # Makefile for common development tasks
 DOCKER_COMPOSE_DIR := docker
-IMAGE_NAME ?= ghcr.io/stefanelul2000/ticket-sale:dev-latest
+IMAGE_NAME ?= ticket-sale:local
 
 .PHONY: dev build-image down shell test smoke-test logs
 
@@ -12,9 +12,7 @@ dev: build-image
 
 # Build the dev image
 build-image:
-	docker build -f $(DOCKER_COMPOSE_DIR)/Dockerfile \
-		--build-arg APP_URL=http://localhost:8080 \
-		-t $(IMAGE_NAME) .
+	docker build -f $(DOCKER_COMPOSE_DIR)/Dockerfile --target app -t $(IMAGE_NAME) .
 
 # The image is built to include the swagger JSON by default (BUILD_GENERATE_SWAGGER)
 
@@ -24,7 +22,8 @@ shell:
 
 # Run tests in the app container
 test:
-	cd $(DOCKER_COMPOSE_DIR) && docker compose exec app sh -c "cd /var/www/html && composer test || php artisan test"
+	docker build -f $(DOCKER_COMPOSE_DIR)/Dockerfile --target test -t ticket-sale:test .
+	docker run --rm ticket-sale:test
 
 # Stop containers
 down:

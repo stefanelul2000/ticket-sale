@@ -1,44 +1,22 @@
+# Local development on top of docker-compose.yml:
+#   DATA_DIR=./local DB_PASSWORD=dev DB_ROOT_PASSWORD=dev \
+#   docker compose -f docker-compose.yml -f docker-compose.override.yml up -d --build
 services:
   app:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    image: ${IMAGE_NAME:-ticket-sale:test}
-    container_name: ticket-sale-app
-    ports:
-      - "8080:80"
-    volumes:
-      # Source code bind mounts keep development fast (host -> container)
-      - ../app/backend:/var/www/html:delegated
-      - ../app/frontend:/app/frontend:delegated
-      # Keep vendor + node_modules in sync with the host repo
-      - ../app/backend/vendor:/var/www/html/vendor:delegated
-      - ../app/frontend/node_modules:/app/frontend/node_modules:delegated
-      # Local storage and config mounts for dev convenience
-      - ./local-storage:/var/www/html/storage
-      - ./local-config:/config
-      - ./local-logs:/var/log
-      # Alternative (host bind mounts) for vendor & node_modules -- uncomment to use host copies:
-      # - ../app/backend/vendor:/var/www/html/vendor:delegated
-      # - ../app/frontend/node_modules:/app/frontend/node_modules:delegated
+    image: ticket-sale:dev
     environment:
-      TZ: Europe/Bucharest
       APP_ENV: local
       APP_DEBUG: "true"
-      VITE_API_URL: "http://localhost:8080/api"
+      APP_URL: http://localhost:8080
+      FRONTEND_URL: http://localhost:8080
+      SESSION_SECURE_COOKIE: "false"
       GENERATE_L5_SWAGGER_ON_STARTUP: "true"
-      FRONTEND_URL: "http://localhost:8080"
-  phpmyadmin:
-    image: phpmyadmin/phpmyadmin:5
-    container_name: ticket-sale-phpmyadmin
-    depends_on:
-      - db
-    environment:
-      PMA_HOST: db
-      PMA_USER: ticket_user
-      PMA_PASSWORD: ticket_pass
-      PMA_ABSOLUTE_URI: http://localhost:8081/
-    ports:
-      - "8081:80"
+    volumes:
+      - ../app/backend/app:/var/www/html/app
+      - ../app/backend/routes:/var/www/html/routes
+      - ../app/backend/config:/var/www/html/config
+      - ../app/backend/database:/var/www/html/database
 
-volumes: {}
+  db:
+    ports:
+      - "127.0.0.1:3306:3306"

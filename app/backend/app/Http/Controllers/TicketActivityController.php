@@ -12,12 +12,14 @@ class TicketActivityController extends Controller
         $limit = max(1, min(200, (int) $request->get('limit', 50)));
 
         $logs = TicketActivityLog::with('user:id,name,username')
-            ->orderByDesc('created_at')
+            ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
+            ->orderByDesc('id')
             ->limit($limit)
             ->get()
             ->map(function (TicketActivityLog $log) {
                 return [
                     'id' => $log->id,
+                    'event_id' => $log->event_id,
                     'ticket_code' => $log->ticket_code,
                     'action' => $log->action,
                     'status' => $log->status,
@@ -36,9 +38,11 @@ class TicketActivityController extends Controller
         return response()->json($logs);
     }
 
-    public function destroy()
+    public function destroy(Request $request)
     {
-        TicketActivityLog::truncate();
+        $count = TicketActivityLog::count();
+        TicketActivityLog::query()->delete();
+        $this->logAdminAction($request->user()?->id, 'ticket_activity.clear', ['entries' => $count]);
 
         return response()->json(['cleared' => true]);
     }

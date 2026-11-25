@@ -1,353 +1,126 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@font-face { font-family: Manrope; font-style: normal; font-weight: 400 800; font-display: swap;
+  src: url(/fonts/manrope-latin-ext-400-normal.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: Manrope; font-style: normal; font-weight: 400 800; font-display: swap;
+  src: url(/fonts/manrope-latin-400-normal.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 400 800; font-display: swap;
+  src: url(/fonts/bricolage-grotesque-latin-ext-700-normal.woff2) format("woff2");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Bricolage Grotesque"; font-style: normal; font-weight: 400 800; font-display: swap;
+  src: url(/fonts/bricolage-grotesque-latin-700-normal.woff2) format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg: #070910;
-  --panel: #0f1524;
-  --text: #f6f7fb;
-  --muted: #9fb1d2;
-  --accent: #ff7b6d;
-  --accent-2: #58e0c0;
-  --border: rgba(255, 255, 255, 0.09);
-  --radius: 14px;
-  --shadow: 0 26px 70px rgba(0, 0, 0, 0.35);
-  font-family: 'Space Grotesk', 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  background:
-    radial-gradient(circle at 18% 18%, rgba(88, 224, 192, 0.12), transparent 30%),
-    radial-gradient(circle at 82% 12%, rgba(255, 123, 109, 0.12), transparent 32%),
-    radial-gradient(circle at 50% 80%, rgba(112, 143, 255, 0.12), transparent 35%),
-    #070910;
-  color: var(--text);
+/* Tokens copied from atelier-sacelean.ro (light = default site look, dark = its admin dark mode). */
+:root,
+:root[data-theme='light'] {
+  color-scheme: light;
+  --a-bg: #f6f9fa;
+  --a-surface: #ffffff;
+  --a-surface-2: #eef4f7;
+  --a-surface-deep: #f4f7f9;
+  --a-ink: #24313a;
+  --a-ink-soft: #55656f;
+  --a-muted: #455663;
+  --a-line: #e4ebef;
+  --a-line-strong: #d5e0e6;
+  --a-control-line: #828e97;
+  --a-accent: #0075a1;
+  --a-accent-strong: #0087bd;
+  --a-accent-tint: #0075a11a;
+  --a-on-accent: #ffffff;
+  --a-ok: #1a7247;
+  --a-ok-bg: #e9f7ef;
+  --a-ok-line: #c6e8d5;
+  --a-warn: #96650c;
+  --a-warn-bg: #fbf2df;
+  --a-danger: #b3312a;
+  --a-danger-bg: #fdeeee;
+  --a-danger-line: #c47f79;
+  /* charts (validated: mark vs surface >= 3:1, lightness band) */
+  --chart-mark: #0087bd;
+  --chart-track: #cdeefb;
+  --chart-grid: #e4ebef;
 }
 
-* {
-  box-sizing: border-box;
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --a-bg: #0b1016;
+  --a-surface: #141b23;
+  --a-surface-2: #1a2129;
+  --a-surface-deep: #0e141b;
+  --a-ink: #eaf1f6;
+  --a-ink-soft: #becbd6;
+  --a-muted: #9daab6;
+  --a-line: #eaf1f61f;
+  --a-line-strong: #eaf1f638;
+  --a-control-line: #eaf1f666;
+  --a-accent: #00aeef;
+  --a-accent-strong: #4cc9f5;
+  --a-accent-tint: #00aeef1f;
+  --a-on-accent: #00252f;
+  --a-ok: #62c194;
+  --a-ok-bg: #162d23;
+  --a-ok-line: #285440;
+  --a-warn: #f0a73c;
+  --a-warn-bg: #322817;
+  --a-danger: #ef8279;
+  --a-danger-bg: #35201e;
+  --a-danger-line: #a15a52;
+  --chart-mark: #009fdc;
+  --chart-track: #1d3a4a;
+  --chart-grid: #eaf1f61f;
+}
+
+html,
+body {
+  background: var(--a-bg);
+  color: var(--a-ink);
+  font-family: Manrope, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  background: transparent;
 }
 
-select {
+h1, h2, h3, .font-display {
+  font-family: 'Bricolage Grotesque', Manrope, ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+:focus-visible {
+  outline: 2px solid var(--a-accent);
+  outline-offset: 2px;
+}
+
+input, select, textarea {
+  font: inherit;
+}
+
+select.select {
   appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background: var(--panel);
-  color: var(--text);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 10px 36px 10px 12px;
-  font-weight: 600;
-  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23f6f7fb' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%23828e97' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
-  background-size: 14px;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 20px rgba(0,0,0,0.18);
+  background-size: 12px;
+  padding-right: 36px;
 }
 
-select:focus {
-  outline: none;
-  border-color: rgba(255,255,255,0.25);
-  box-shadow: 0 0 0 3px rgba(255,255,255,0.08);
-}
+.tabular { font-variant-numeric: tabular-nums; }
 
-option {
-  background-color: #0f1524;
-  color: var(--text);
-  font-weight: 600;
-}
+/* Logo is black + blue: on dark surfaces it sits on a white badge. */
+.logo-badge { background: transparent; }
+:root[data-theme='dark'] .logo-badge { background: #ffffff; border-radius: 9999px; padding: 3px; }
 
-#root {
-  min-height: 100vh;
-}
+.scroll-thin { scrollbar-width: thin; scrollbar-color: var(--a-line-strong) transparent; }
 
-a {
-  color: inherit;
-}
-
-.surface {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-}
-
-/* --- Responsive Layout Classes --- */
-
-.admin-users-invite {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 1fr 140px auto;
-  gap: 12px;
-  margin-bottom: 14px;
-  align-items: center;
-}
-
-.admin-users-list {
-  display: grid;
-  gap: 10px;
-  margin-top: 10px;
-  /* Handle extreme narrow widths on desktop gracefully */
-  overflow-x: auto; 
-}
-
-.admin-user-row {
-  display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr 150px auto;
-  align-items: center;
-  gap: 12px;
-  border: 1px solid var(--border);
-  padding: 12px 14px;
-  border-radius: 12px;
-  background: rgba(255,255,255,0.02);
-  /* Ensure text shrinks before overflowing */
-  min-width: 0;
-}
-
-.admin-user-row > div {
-  /* Truncate long text in grid cells */
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-/* Events View Classes */
-.event-card {
-  display: grid;
-  gap: 10px;
-  border: 1px solid var(--border);
-  padding: 10px 12px;
-  border-radius: 10px;
-}
-
-.event-summary-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 10px;
-  align-items: center;
-}
-
-.event-add-row-container {
-  display: grid;
-  grid-template-columns: 2fr 1fr auto;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.event-ticket-add-container {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 100px 100px;
-  gap: 8px;
-  margin-bottom: 10px;
-}
-
-/* Ticket Type Card Redesign */
-.ticket-type-card {
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px;
-  background: rgba(255,255,255,0.02);
-  display: flex;
-  flex-direction: column; /* Default stack on mobile */
-  gap: 8px;
-}
-
-.ticket-type-card-main-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.ticket-type-card-name {
-  font-weight: 700;
-  color: var(--text);
-}
-
-.ticket-type-card-event {
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.ticket-type-card-details {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-}
-
-.ticket-type-card-item {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.ticket-type-card-label {
-  font-weight: 600;
-  color: var(--muted);
-}
-
-.ticket-type-card-kind {
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: rgba(88,224,192,0.1);
-  color: var(--accent-2);
-  font-weight: 600;
-}
-
-.ticket-type-card-price {
-  font-weight: 600;
-  color: var(--text);
-}
-
-.ticket-type-card-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
-.branding-colors-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 12px;
-}
-
-.branding-container {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: 1.2fr 1fr;
-  align-items: start;
-}
-
-.sell-ticket-form {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr 1fr;
-}
-
-.mobile-menu-btn {
-  /* Visibility controlled by React state (isMobile) */
-  display: inline-flex;
-}
-
-/* --- Mobile Breakpoint (< 900px) --- */
-@media (max-width: 900px) {
-  .layout-grid {
-    grid-template-columns: 1fr !important;
-  }
-
-  .layout-header {
-    /* Layout.tsx handles grid-template-columns, no !important override needed */
-    /* display: grid !important; */
-    /* grid-template-columns: auto 1fr !important; */
-  }
-  
-  .sidebar {
-    display: none !important;
-  }
-
-  .sidebar.open {
-    display: grid !important;
-    position: relative !important;
-    top: 0;
-    left: 0;
-    right: 0;
-    z-index: 1;
-    background: var(--panel);
-    max-height: none;
-    overflow: visible;
-  }
-
-  .two-col {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Admin Users Mobile */
-  .admin-users-invite {
-    grid-template-columns: 1fr !important;
-    gap: 10px;
-  }
-  .admin-users-invite > div {
-    justify-content: flex-start !important;
-  }
-  .admin-user-row {
-    grid-template-columns: 1fr !important;
-    gap: 8px;
-    align-items: stretch;
-  }
-  .admin-user-row select {
-    width: 100% !important;
-  }
-  .admin-user-row > div:last-child {
-    justify-content: space-between !important;
-    margin-top: 8px;
-  }
-  .admin-user-row > div {
-    white-space: normal; /* Allow wrapping on mobile cards */
-    overflow: visible;
-  }
-
-  /* Events Mobile */
-  .event-summary-row {
-    grid-template-columns: 1fr !important; /* Stack actions */
-  }
-  .event-summary-row > div:last-child {
-    justify-content: space-between !important;
-    margin-top: 8px;
-  }
-  
-  .event-add-row-container {
-    grid-template-columns: 1fr !important;
-  }
-  .event-ticket-add-container {
-    grid-template-columns: 1fr !important;
-  }
-  .event-generate-row > div:first-child {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  
-  /* Ticket Type Card Mobile */
-  .ticket-type-card-details {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .ticket-type-card-actions {
-    justify-content: flex-start;
-  }
-
-  /* Branding Mobile */
-  .branding-colors-grid {
-    grid-template-columns: 1fr !important;
-  }
-  .branding-container {
-    grid-template-columns: 1fr !important;
-  }
-
-  /* Dashboard Mobile */
-  .sell-ticket-form {
-    grid-template-columns: 1fr !important;
-  }
-}
-
-.activity-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: #475569 transparent;
-}
-
-.activity-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-
-.activity-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.activity-scroll::-webkit-scrollbar-thumb {
-  background-color: #475569;
-  border-radius: 9999px;
+@media print {
+  .no-print { display: none !important; }
 }

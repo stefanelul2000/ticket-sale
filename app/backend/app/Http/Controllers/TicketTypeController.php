@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Ticket;
 use App\Models\TicketType;
 use Illuminate\Http\Request;
 
@@ -27,6 +28,11 @@ class TicketTypeController extends Controller
     {
         $ticket = TicketType::findOrFail($ticketTypeId);
         $data = $this->validated($request, $ticketTypeId);
+
+        if ((int) $data['event_id'] !== (int) $ticket->event_id && Ticket::where('ticket_type_id', $ticket->id)->exists()) {
+            return response()->json(['message' => __('Tickets already exist for this type; it cannot move to another event.')], 422);
+        }
+
         $ticket->update($data);
         return $ticket->fresh();
     }
@@ -34,6 +40,14 @@ class TicketTypeController extends Controller
     public function destroy(int $ticketTypeId)
     {
         $ticket = TicketType::findOrFail($ticketTypeId);
+
+        $issued = Ticket::where('ticket_type_id', $ticket->id)->count();
+        if ($issued > 0) {
+            return response()->json([
+                'message' => __(':n ticket(s) were generated for this type; it cannot be deleted.', ['n' => $issued]),
+            ], 409);
+        }
+
         $ticket->delete();
         return response()->json(['deleted' => true]);
     }
@@ -50,7 +64,7 @@ class TicketTypeController extends Controller
             'shared_capacity_key' => ['nullable', 'string', 'max:255'],
             'is_active' => ['boolean'],
             'sales_start' => ['nullable', 'date'],
-            'sales_end' => ['nullable', 'date'],
+            'sales_end' => ['nullable', 'date', 'after_or_equal:sales_start'],
             'sort' => ['nullable', 'integer', 'min:0'],
             'metadata' => ['nullable', 'array'],
         ]);

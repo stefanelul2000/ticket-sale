@@ -17,20 +17,29 @@ class Ticket extends Model
         'ticket_code',
         'user_id',
         'name',
+        'guest_category',
         'sold_at',
         'checkin',
+        'checked_in_at',
+        'checked_in_by',
+        'is_walk_in',
     ];
 
     protected $casts = [
         'sold_at' => 'datetime',
         'checkin' => 'boolean',
+        'checked_in_at' => 'datetime',
+        'is_walk_in' => 'boolean',
     ];
-
-    protected $appends = ['code'];
 
     public function seller()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function checkedInBy()
+    {
+        return $this->belongsTo(User::class, 'checked_in_by');
     }
 
     public function event()
@@ -40,13 +49,11 @@ class Ticket extends Model
 
     public function ticketType()
     {
-        return $this->belongsTo(TicketType::class);
+        return $this->belongsTo(TicketType::class)->withTrashed();
     }
 
-    public function getCodeAttribute(): string
+    public function isSold(): bool
     {
-        $capacity = $this->event->capacity ?? null;
-        $width = $capacity ? max(3, strlen((string) $capacity)) : max(3, strlen((string) $this->ticket_number));
-        return str_pad((string) $this->ticket_number, $width, '0', STR_PAD_LEFT);
+        return $this->sold_at !== null;
     }
 }

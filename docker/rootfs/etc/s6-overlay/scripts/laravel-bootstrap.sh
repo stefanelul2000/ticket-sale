@@ -1,4 +1,2 @@
-#!/command/with-contenv bash
-set -euo pipefail
-
-INIT_ONLY=true /docker/entrypoint.sh
+#!/command/with-contenv sh
+exec /docker/entrypoint.sh

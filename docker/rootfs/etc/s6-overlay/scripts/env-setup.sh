@@ -22,17 +22,11 @@ fi
 
 echo "Permissions fixed: www-data is now UID ${PUID}"
 
-if [ -d /var/www ]; then
-  ROOT_UID=$(stat -c %u /var/www)
-  ROOT_GID=$(stat -c %g /var/www)
-  if [ "${ROOT_UID}" != "${PUID}" ] || [ "${ROOT_GID}" != "${PGID}" ]; then
-    echo "Adjusting ownership for /var/www to ${PUID}:${PGID}"
-    chown -R www-data:www-data /var/www
-    chown -R www-data:www-data /var/log || true
-  else
-    echo "/var/www already owned by ${PUID}:${PGID}; skipping recursive chown"
-  fi
-fi
+# Only runtime directories belong to www-data; the application code stays root-owned.
+for d in /var/www/storage /var/www/bootstrap/cache; do
+  [ -d "$d" ] && chown -R www-data:www-data "$d"
+done
+chown -R www-data:www-data /var/log/php82 2>/dev/null || true
 
 mkdir -p /var/log/nginx /var/log/php82 /var/lib/nginx/logs
 chown -R nginx:nginx /var/log/nginx /var/lib/nginx/logs

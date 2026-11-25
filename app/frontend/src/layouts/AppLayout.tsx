@@ -1,259 +1,136 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import type { ComponentType } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import clsx from 'clsx';
-import { useAuth } from '../state/useAuth';
-import { useTheme } from '../state/useTheme';
-import { withAlpha, mixWithWhite } from '../ui/utils/colors';
+import { useAuth, useRealRoleId, useRoleId } from '../state/useAuth';
+import { useT } from '../i18n';
+import type { TKey } from '../i18n';
+import { roleKey } from '../lib/constants';
+import { Logo } from '../ui/components/ui/Misc';
+import { Preferences } from '../ui/components/Preferences';
 import { Button } from '../ui/components/ui/Button';
+import { IconCalendar, IconChart, IconHome, IconLogout, IconMenu, IconScan, IconSettings, IconTicket, IconUsers } from '../ui/components/Icons';
 
-const coreNav = [
-  { to: '/dashboard', label: 'Dashboard', minRole: 1 },
-  { to: '/events', label: 'Events', minRole: 4 },
-  { to: '/tickets', label: 'Tickets', minRole: 2 },
-];
+type NavItem = { to: string; label: TKey; icon: ComponentType<{ size?: number }>; allow: (role: number) => boolean; end?: boolean };
 
-const adminNav = [
-  { to: '/admin/users', label: 'Users' },
-  { to: '/admin/roles', label: 'Roles' },
-  { to: '/admin/branding', label: 'Branding' },
-  { to: '/admin/impersonation', label: 'Impersonation' },
+export const NAV: NavItem[] = [
+  { to: '/', label: 'nav.dashboard', icon: IconHome, allow: () => true, end: true },
+  { to: '/door', label: 'nav.door', icon: IconScan, allow: (r) => r >= 2 && r !== 3 },
+  { to: '/assign', label: 'nav.assign', icon: IconTicket, allow: (r) => r >= 3 },
+  { to: '/events', label: 'nav.events', icon: IconCalendar, allow: (r) => r >= 4 },
+  { to: '/reports', label: 'nav.reports', icon: IconChart, allow: (r) => r >= 1 },
+  { to: '/users', label: 'nav.users', icon: IconUsers, allow: (r) => r >= 5 },
+  { to: '/settings', label: 'nav.settings', icon: IconSettings, allow: (r) => r >= 5 },
 ];
 
 export function AppLayout() {
+  const t = useT();
   const { user, logout, stopImpersonation } = useAuth();
-  const { logoUrl, primary, secondary, background } = useTheme();
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const role = useRoleId();
+  const realRole = useRealRoleId();
+  const [open, setOpen] = useState(false);
+  const [stopping, setStopping] = useState(false);
   const location = useLocation();
-  const roleValue = user?.role?.id ?? user?.role_id ?? 0;
-  const canAccessAdmin = !user?.impersonating && roleValue >= 5;
-  const [adminMenuOpen, setAdminMenuOpen] = useState(canAccessAdmin && location.pathname.startsWith('/admin'));
-  const [stoppingImpersonation, setStoppingImpersonation] = useState(false);
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!canAccessAdmin) return;
-    setAdminMenuOpen(location.pathname.startsWith('/admin'));
-  }, [location.pathname, canAccessAdmin]);
+  useEffect(() => setOpen(false), [location.pathname]);
 
-  const handleStopImpersonation = async () => {
-    setStoppingImpersonation(true);
-    try {
-      await stopImpersonation();
-    } catch {
-      // ignore
-    } finally {
-      setStoppingImpersonation(false);
-    }
+  const items = NAV.filter((n) => n.allow(role));
+
+  const doLogout = async () => {
+    await logout();
+    navigate('/login', { replace: true });
   };
 
-  const shellBackground = mixWithWhite(background, 0.05);
-  const panelBackground = withAlpha(background, 0.9);
+  const sidebar = (
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-3 px-5 pb-5 pt-6">
+        <Logo size={44} />
+        <div className="leading-tight">
+          <div className="font-display text-lg font-bold">Atelier Săcelean</div>
+          <div className="text-xs font-semibold uppercase tracking-wider text-accent">{t('app.subtitle')}</div>
+        </div>
+      </div>
+      <nav className="flex-1 space-y-1 px-3" aria-label={t('nav.main')}>
+        {items.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={({ isActive }) =>
+              clsx(
+                'flex items-center gap-3 rounded px-3 py-2.5 text-sm font-semibold transition-colors',
+                isActive ? 'bg-accenttint text-accent' : 'text-soft hover:bg-surface2 hover:text-ink',
+              )
+            }
+          >
+            <item.icon size={19} />
+            {t(item.label)}
+          </NavLink>
+        ))}
+      </nav>
+      <div className="space-y-3 border-t border-line p-4">
+        <div className="min-w-0">
+          <div className="truncate text-sm font-bold">{user?.name}</div>
+          <div className="truncate text-xs text-soft">{t(roleKey(realRole))}</div>
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <Preferences />
+          <button type="button" onClick={doLogout} className="inline-flex h-8 items-center gap-1.5 rounded px-2 text-sm font-semibold text-soft hover:bg-surface2 hover:text-ink">
+            <IconLogout size={16} /> {t('auth.logout')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
-    <div className="flex min-h-screen text-slate-100" style={{ backgroundColor: shellBackground }}>
-      <aside
-        className={clsx(
-          'fixed inset-y-0 left-0 z-30 w-64 border-r p-6 transition-transform lg:static lg:block lg:translate-x-0',
-          mobileMenuOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full lg:shadow-none',
-        )}
-        style={{
-          backgroundColor: panelBackground,
-          borderColor: withAlpha('#ffffff', 0.06),
-        }}
-      >
-        <div className="flex h-full flex-col">
-          <div className="mb-8 flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-lg font-bold text-white">
-              {logoUrl ? <img src={logoUrl} alt="Brand logo" className="h-12 w-12 rounded-2xl object-cover" /> : 'TS'}
-            </div>
-            <div>
-              <p className="text-lg font-semibold text-white">Ticket Sale</p>
-              <p className="text-sm text-slate-400">Control Center</p>
-            </div>
-          </div>
-          <nav className="space-y-2 overflow-y-auto">
-            {coreNav
-              .filter((item) => roleValue >= item.minRole)
-              .map((item) => (
-                <NavLink
-                  key={item.to}
-                to={item.to}
-                onClick={() => setMobileMenuOpen(false)}
-                className={({ isActive }) =>
-                  clsx(
-                    'block rounded-xl px-4 py-2 text-sm font-semibold transition',
-                    isActive ? 'text-white shadow-lg' : 'text-slate-300',
-                  )
-                }
-                style={({ isActive }) => ({
-                  background: isActive ? `linear-gradient(135deg, ${primary}, ${secondary})` : withAlpha('#ffffff', 0.02),
-                  border: `1px solid ${withAlpha('#ffffff', 0.06)}`,
-                })}
-              >
-                {item.label}
-              </NavLink>
-            ))}
-          </nav>
-          {canAccessAdmin && (
-            <div className="mt-6 space-y-2">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between rounded-xl border px-4 py-2 text-left text-sm font-semibold text-slate-200"
-                style={{
-                  borderColor: withAlpha('#ffffff', 0.08),
-                  backgroundColor: withAlpha(background, 0.6),
-                }}
-                onClick={() => setAdminMenuOpen((open) => !open)}
-              >
-                <span>Admin</span>
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className={clsx('h-4 w-4 transition', adminMenuOpen ? 'rotate-180' : '')}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M6 9l6 6 6-6" />
-                </svg>
-              </button>
-              {adminMenuOpen && (
-                <div
-                  className="space-y-1 rounded-2xl border p-2"
-                  style={{
-                    borderColor: withAlpha('#ffffff', 0.08),
-                    backgroundColor: withAlpha(background, 0.4),
-                  }}
-                >
-                  {adminNav.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      onClick={() => setMobileMenuOpen(false)}
-                      className={({ isActive }) =>
-                        clsx('block rounded-lg px-3 py-2 text-sm font-medium transition', isActive ? 'text-white shadow-lg' : 'text-slate-300')
-                      }
-                      style={({ isActive }) => ({
-                        backgroundColor: isActive ? withAlpha(primary, 0.8) : withAlpha(background, 0.6),
-                      })}
-                    >
-                      {item.label}
-                    </NavLink>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+    <div className="min-h-screen lg:flex">
+      <aside className="sticky top-0 hidden h-screen w-64 shrink-0 border-r border-line bg-surface lg:block">{sidebar}</aside>
+
+      {/* mobile */}
+      <header className="sticky top-0 z-30 flex items-center justify-between border-b border-line bg-surface/95 px-4 py-2 backdrop-blur lg:hidden">
+        <div className="flex items-center gap-2">
+          <Logo size={32} />
+          <span className="font-display font-bold">Atelier Săcelean</span>
         </div>
-      </aside>
-      {mobileMenuOpen && (
-        <button
-          type="button"
-          className="fixed inset-0 z-20 bg-black/50 backdrop-blur-sm lg:hidden"
-          onClick={() => setMobileMenuOpen(false)}
-          aria-label="Close navigation menu"
-        />
+        <button type="button" onClick={() => setOpen(true)} className="rounded p-2 text-ink hover:bg-surface2" aria-label={t('nav.menu')}>
+          <IconMenu />
+        </button>
+      </header>
+      {open && (
+        <div className="fixed inset-0 z-40 bg-navy/40 lg:hidden" onClick={() => setOpen(false)}>
+          <aside className="h-full w-72 max-w-[85vw] bg-surface shadow-pop" onClick={(e) => e.stopPropagation()}>
+            {sidebar}
+          </aside>
+        </div>
       )}
-      <div className="flex flex-1 flex-col" style={{ backgroundColor: mixWithWhite(background, 0.05) }}>
-        <header
-          className="flex h-16 items-center justify-between border-b px-4 lg:px-8"
-          style={{
-            backgroundColor: withAlpha(background, 0.92),
-            borderColor: withAlpha('#ffffff', 0.08),
-          }}
-        >
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              className="flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold text-white shadow-lg transition focus:outline-none focus:ring-2 focus:ring-blue-300 lg:hidden"
-              style={{
-                background: `linear-gradient(135deg, ${primary}, ${secondary})`,
-                borderColor: withAlpha(primary, 0.3),
-                boxShadow: `0 10px 25px ${withAlpha(primary, 0.4)}`,
+
+      <main className="min-w-0 flex-1">
+        {user?.impersonating && (
+          <div className="flex flex-wrap items-center justify-center gap-3 bg-warnbg px-4 py-2 text-sm font-semibold text-warn">
+            {t('imp.banner', { role: t(roleKey(role)) })}
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={stopping}
+              onClick={async () => {
+                setStopping(true);
+                try {
+                  await stopImpersonation();
+                } finally {
+                  setStopping(false);
+                }
               }}
-              onClick={() => setMobileMenuOpen((open) => !open)}
-              aria-label="Toggle navigation menu"
-              aria-expanded={mobileMenuOpen}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.6} d="M4 8h16M4 16h16" />
-              </svg>
-              <span>Menu</span>
-            </button>
-            <div className="text-base font-semibold lg:hidden">Ticket Sale</div>
+              {t('imp.stop')}
+            </Button>
           </div>
-          <div className="flex items-center gap-3">
-            {user?.impersonating && (
-              <Button
-                variant="ghost"
-                className="text-xs font-semibold"
-                style={{
-                  borderColor: withAlpha(primary, 0.4),
-                  color: mixWithWhite(primary, 0.5),
-                }}
-                onClick={handleStopImpersonation}
-                disabled={stoppingImpersonation}
-              >
-                {stoppingImpersonation ? 'Stopping…' : 'Stop impersonation'}
-              </Button>
-            )}
-            <div className="relative">
-              <button
-                type="button"
-                className="flex items-center gap-3 rounded-full border px-3 py-1.5 text-sm font-semibold text-white shadow"
-                style={{
-                  borderColor: withAlpha('#ffffff', 0.1),
-                  backgroundColor: withAlpha(background, 0.6),
-                }}
-                onClick={() => setProfileOpen((open) => !open)}
-              >
-                <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-sm font-bold">
-                  {user?.name?.charAt(0).toUpperCase() ?? 'U'}
-                </span>
-                <span className="hidden md:block">{user?.name ?? 'Unknown User'}</span>
-              </button>
-              {profileOpen && (
-                <div
-                  className="absolute right-0 mt-2 w-64 rounded-2xl border p-4 text-sm shadow-2xl"
-                  style={{
-                    borderColor: withAlpha('#ffffff', 0.1),
-                    backgroundColor: withAlpha(background, 0.95),
-                  }}
-                >
-                  <div className="mb-3 flex items-center gap-3">
-                    <div className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-blue-600 text-sm font-bold text-white">
-                      {user?.name?.charAt(0).toUpperCase() ?? 'U'}
-                    </div>
-                    <div>
-                      <strong className="block text-base text-white">{user?.name ?? 'Unknown User'}</strong>
-                      <span className="text-xs text-slate-400">@{user?.username ?? 'unknown'}</span>
-                    </div>
-                  </div>
-                  <hr className="my-3 border-slate-800/60" />
-                  <button
-                    type="button"
-                    className="w-full rounded-xl px-3 py-2 text-left text-sm font-semibold text-white"
-                    style={{
-                      background: `linear-gradient(135deg, ${primary}, ${secondary})`,
-                    }}
-                    onClick={() => {
-                      setProfileOpen(false);
-                      logout().catch(() => {});
-                    }}
-                  >
-                    Sign out
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </header>
-        <main
-          className="flex-1 overflow-y-auto p-4 lg:p-8"
-          style={{ backgroundColor: withAlpha(background, 0.3) }}
-        >
+        )}
+        <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
           <Outlet />
-        </main>
-      </div>
+        </div>
+      </main>
     </div>
   );
 }

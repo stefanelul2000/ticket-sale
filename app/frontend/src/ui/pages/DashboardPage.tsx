@@ -1,431 +1,241 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import type { FormEvent, KeyboardEvent as ReactKeyboardEvent } from 'react';
-import { useAuth } from '../../state/useAuth';
-import { Card } from '../components/ui/Card';
-import { Button } from '../components/ui/Button';
-import { Input } from '../components/ui/Input';
-import { Spinner } from '../components/ui/Spinner';
+import { useCallback, useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useAuth, useRoleId } from '../../state/useAuth';
+import { useCurrentEvent } from '../../state/useCurrentEvent';
+import type { EventSummary } from '../../state/useCurrentEvent';
+import { useT } from '../../i18n';
 import { api } from '../../lib/api';
-
-type Ticket = {
-  id: number;
-  ticket_number: number;
-  ticket_code?: string;
-  code?: string;
-  name?: string;
-  sold_at?: string;
-  checkin: boolean;
-};
-
-type Stats = {
-  total: number;
-  sold: number;
-  unsold: number;
-  checked_in: number;
-};
-
-type HistoryItem = {
-  id: number | string;
-  ticket_code?: string | null;
-  action: 'verify' | 'checkin' | 'sell';
-  status: string;
-  success: boolean;
-  name?: string | null;
-  created_at: string;
-  user?: {
-    id: number;
-    name: string;
-    username: string;
-  } | null;
-};
-
-const MAX_HISTORY_ITEMS = 50;
+import { eventPhase, fmtNumber, fmtPercent, fmtTime, fmtWeekdayDate } from '../../lib/format';
+import type { ActivityItem } from '../../types';
+import { Card } from '../components/ui/Card';
+import { Badge } from '../components/ui/Badge';
+import { Meter } from '../components/ui/Stat';
+import { EmptyState, Loading, PageHeader } from '../components/ui/Misc';
+import { EventPicker } from '../components/EventPicker';
+import { PhaseBadge } from '../components/EventBits';
+import { IconCalendar, IconChart, IconPin, IconScan, IconTicket } from '../components/Icons';
 
 export function DashboardPage() {
+  const t = useT();
   const { user } = useAuth();
-  const roleId = user?.role_id ?? 0;
-  const canSell = roleId >= 3;
-  const canCheckin = roleId >= 2 && roleId !== 3;
-  const canSeeHistory = roleId >= 2;
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [loadingStats, setLoadingStats] = useState(false);
-  const [sellTicket, setSellTicket] = useState({ ticket: '', name: '' });
-  const [verifyNumber, setVerifyNumber] = useState('');
-  const [verifyResult, setVerifyResult] = useState<Ticket | null>(null);
-  const [autoCheckin, setAutoCheckin] = useState(false);
-  const [scanStatus, setScanStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
-  const [clearingHistory, setClearingHistory] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const historyIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const lastActivityRef = useRef<number | string | null>(null);
-  const historyInitialLoadRef = useRef(false);
-  const historyRef = useRef<HistoryItem[]>([]);
-  useEffect(() => {
-    historyRef.current = history;
-  }, [history]);
+  const role = useRoleId();
+  const { events, eventId, loaded, load } = useCurrentEvent();
+  const current = events.find((e) => e.id === eventId) ?? null;
 
   useEffect(() => {
-    if (!user) return;
-    setLoadingStats(true);
-    api
-      .stats()
-      .then((res) => setStats(res))
-      .catch(() => {})
-      .finally(() => setLoadingStats(false));
-  }, [user]);
+    load(true);
+    const id = setInterval(() => document.visibilityState === 'visible' && load(true), 20000);
+    return () => clearInterval(id);
+  }, [load]);
 
-  const updateStats = useCallback(async () => {
-    if (!user) return;
-    try {
-      const res = await api.stats();
-      setStats(res);
-    } catch {
-      /* ignore */
-    }
-  }, [user]);
-
-  const loadHistory = useCallback(
-    async (withSpinner = false) => {
-      if (withSpinner) {
-        setHistoryLoading(true);
-      }
-      try {
-        const data: HistoryItem[] = await api.ticketActivity();
-        const prevHistory = historyRef.current;
-        if (!historyInitialLoadRef.current || prevHistory.length === 0) {
-          historyInitialLoadRef.current = true;
-          lastActivityRef.current = data[0]?.id ?? null;
-          setHistory(data);
-          return;
-        }
-
-        const currentTopId = prevHistory[0]?.id;
-        const firstExistingIndex = data.findIndex((item) => item.id === currentTopId);
-        const newEntries =
-          firstExistingIndex === -1 ? data : data.slice(0, Math.max(0, firstExistingIndex));
-
-        if (newEntries.length === 0) {
-          return;
-        }
-
-        lastActivityRef.current = newEntries[0]?.id ?? lastActivityRef.current;
-        setHistory((prev) => [...newEntries, ...prev].slice(0, MAX_HISTORY_ITEMS));
-
-        if (newEntries.some((entry) => entry.action === 'sell' || entry.action === 'checkin')) {
-          updateStats();
-        }
-      } catch {
-        /* ignore */
-      } finally {
-        if (withSpinner) {
-          setHistoryLoading(false);
-        }
-      }
-    },
-    [updateStats],
-  );
-
-  useEffect(() => {
-    if (!canSeeHistory) {
-      setHistory([]);
-      historyRef.current = [];
-      historyInitialLoadRef.current = false;
-      lastActivityRef.current = null;
-      setHistoryLoading(false);
-      if (historyIntervalRef.current) {
-        clearInterval(historyIntervalRef.current);
-        historyIntervalRef.current = null;
-      }
-      return undefined;
-    }
-
-    loadHistory(true);
-    historyIntervalRef.current = setInterval(() => {
-      loadHistory();
-    }, 5000);
-
-    return () => {
-      if (historyIntervalRef.current) {
-        clearInterval(historyIntervalRef.current);
-        historyIntervalRef.current = null;
-      }
-    };
-  }, [canSeeHistory, loadHistory]);
-
-  const clearHistory = async () => {
-    if (!canSeeHistory) return;
-    setClearingHistory(true);
-    try {
-      await api.clearTicketActivity();
-      historyInitialLoadRef.current = false;
-      lastActivityRef.current = null;
-      historyRef.current = [];
-      setHistory([]);
-      await loadHistory(true);
-    } catch {
-      /* ignore */
-    } finally {
-      setClearingHistory(false);
-    }
-  };
-
-  const showToast = (message: string) => {
-    setToast(message);
-    setTimeout(() => setToast((val) => (val === message ? null : val)), 4000);
-  };
-
-  const handleSell = async () => {
-    if (!sellTicket.ticket || !user) return;
-    try {
-      await api.sell(sellTicket.ticket, { name: sellTicket.name });
-      await updateStats();
-      setSellTicket({ ticket: '', name: '' });
-      showToast('Ticket sold.');
-      loadHistory();
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Failed to sell ticket.';
-      showToast(msg);
-      loadHistory();
-    }
-  };
-
-  const handleVerify = async (ticketCode?: string) => {
-    const target = ticketCode ?? verifyNumber;
-    if (!target || !user) return;
-    if (!target.includes('_')) {
-      showToast('Please scan/enter the full ticket code (e.g., 4_001).');
-      return;
-    }
-    try {
-      const res = await api.verify(target);
-      setVerifyResult(res);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Ticket not found.';
-      showToast(msg);
-    } finally {
-      loadHistory();
-    }
-  };
-
-  const handleCheckin = async (ticketNumber?: string | number) => {
-    const target = ticketNumber !== undefined ? String(ticketNumber) : verifyNumber || null;
-    if (!target || !user) return;
-    if (!target.includes('_')) {
-      showToast('Please scan/enter the full ticket code (e.g., 4_001).');
-      if (autoCheckin) {
-        setScanStatus('error');
-        setVerifyNumber('');
-        setTimeout(() => setScanStatus('idle'), 1000);
-        inputRef.current?.focus();
-      }
-      return;
-    }
-    try {
-      await api.checkin(target);
-      if (verifyResult && (verifyResult.ticket_code === target || String(verifyResult.ticket_number) === target)) {
-        setVerifyResult({ ...verifyResult, checkin: true });
-      }
-      await updateStats();
-      showToast('Checked in.');
-      if (autoCheckin) {
-        setScanStatus('success');
-        setVerifyNumber('');
-        setTimeout(() => setScanStatus('idle'), 1000);
-        inputRef.current?.focus();
-      }
-    } catch (err: any) {
-      const msg = err?.response?.data?.message || 'Failed to check in.';
-      showToast(msg);
-      if (autoCheckin) {
-        setScanStatus('error');
-        setVerifyNumber('');
-        setTimeout(() => setScanStatus('idle'), 1000);
-        inputRef.current?.focus();
-      }
-    } finally {
-      loadHistory();
-    }
-  };
-
-  const submitTicketCode = (code?: string) => {
-    const value = (code ?? verifyNumber)?.trim();
-    if (!value) return;
-
-    if (autoCheckin) {
-      handleCheckin(value);
-    } else {
-      handleVerify(value);
-    }
-    setVerifyNumber('');
-  };
-
-  // 1. Direct handler for Key Down events
-  const handleKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      submitTicketCode(verifyNumber);
-    }
-  };
-
-  const handleTicketFormSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    submitTicketCode(verifyNumber);
-  };
+  const upcoming = events
+    .filter((e) => e.id !== eventId && ['upcoming', 'today', 'undated'].includes(eventPhase(e.starts_at, e.ends_at)))
+    .slice(0, 4);
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Dashboard</h1>
-          <p className="text-sm text-slate-400">Ticket operations and at-a-glance metrics.</p>
-        </div>
-        {toast && (
-          <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm text-blue-200 shadow">
-            {toast}
-          </div>
-        )}
-      </div>
+    <div>
+      <PageHeader
+        title={t('dash.hello', { name: user?.name?.split(' ')[0] ?? '' })}
+        subtitle={fmtWeekdayDate(new Date().toISOString())}
+        actions={events.length > 1 ? <EventPicker className="w-72 max-w-full" /> : undefined}
+      />
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {['Total', 'Sold', 'Unsold', 'Checked In'].map((label, index) => {
-          const key = ['total', 'sold', 'unsold', 'checked_in'][index] as keyof Stats;
-          return (
-            <Card key={label} className="bg-slate-900/80">
-              <div className="text-sm uppercase tracking-wide text-slate-400">{label}</div>
-              <div className="text-3xl font-bold text-white">
-                {loadingStats ? <Spinner /> : stats ? stats[key] : '--'}
-              </div>
-            </Card>
-          );
-        })}
-      </div>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          {canSell && (
-            <Card
-              title="Sell Ticket"
-              actions={
-                <Button onClick={handleSell} disabled={!sellTicket.ticket}>
-                  Sell
-                </Button>
-              }
-            >
-              <div className="grid gap-4 md:grid-cols-2">
-                <Input
-                  label="Ticket #"
-                  value={sellTicket.ticket}
-                  onChange={(e) => setSellTicket((prev) => ({ ...prev, ticket: e.target.value }))}
-                />
-                <Input
-                  label="Buyer name"
-                  value={sellTicket.name}
-                  onChange={(e) => setSellTicket((prev) => ({ ...prev, name: e.target.value }))}
-                />
-              </div>
-            </Card>
-          )}
-
-          {canCheckin && (
-            <Card
-              title="Verify / Check-in"
-              actions={
-                <Button variant={autoCheckin ? 'primary' : 'ghost'} onClick={() => setAutoCheckin((prev) => !prev)}>
-                  Auto check-in {autoCheckin ? 'ON' : 'OFF'}
-                </Button>
-              }
-            >
-              <form className="space-y-4" onSubmit={handleTicketFormSubmit}>
-                <Input
-                  label="Ticket code"
-                  value={verifyNumber}
-                  name="ticket_code"
-                  onChange={(e) => {
-                    const raw = e.target.value;
-                    if (raw.includes('\n') || raw.includes('\r')) {
-                      const cleaned = raw.replace(/[\r\n]+/g, '');
-                      setVerifyNumber(cleaned);
-                      submitTicketCode(cleaned);
-                      return;
-                    }
-                    setVerifyNumber(raw);
-                  }}
-                  onKeyDown={handleKeyDown} // Attached listener here
-                  ref={inputRef}
-                />
-                
-                {/* We keep this as a backup */}
-                <button type="submit" className="hidden" aria-hidden="true" tabIndex={-1}>
-                  Submit
-                </button>
-                
-                <div className="flex flex-wrap gap-4">
-                  <Button variant="primary" type="button" onClick={() => handleVerify()}>
-                    Verify
-                  </Button>
-                  <Button variant="ghost" type="button" onClick={() => handleCheckin()}>
-                    Check-in
-                  </Button>
-                </div>
-                {verifyResult && (
-                  <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-200">
-                    <p className="font-semibold">{verifyResult.name || `Ticket ${verifyResult.ticket_number}`}</p>
-                    <p>Status: {verifyResult.checkin ? 'Checked in' : 'Valid'}.</p>
-                  </div>
-                )}
-                {autoCheckin && (
-                  <div
-                    className={`rounded-lg px-3 py-2 text-sm font-semibold ${
-                      scanStatus === 'success'
-                        ? 'bg-green-500/10 text-green-200'
-                        : scanStatus === 'error'
-                          ? 'bg-red-500/10 text-red-200'
-                          : 'bg-slate-800/60 text-slate-300'
-                    }`}
-                  >
-                    Auto mode: {scanStatus === 'idle' ? 'waiting for scan' : scanStatus}
-                  </div>
-                )}
-              </form>
-            </Card>
-          )}
-        </div>
-
-        <Card
-          title="Activity history"
-          actions={
-            <Button variant="ghost" onClick={clearHistory} disabled={!canSeeHistory || clearingHistory || history.length === 0}>
-              {!canSeeHistory ? 'Insufficient role' : clearingHistory ? 'Clearing…' : 'Clear history'}
-            </Button>
-          }
+      {!loaded ? (
+        <Loading />
+      ) : !current ? (
+        <EmptyState
+          title={t('dash.noEvents')}
+          action={role >= 4 ? <Link to="/events?new=1" className="inline-flex h-10 items-center rounded bg-accent px-4 text-sm font-semibold text-onaccent">{t('events.create')}</Link> : undefined}
         >
-          <div className="activity-scroll space-y-3 max-h-[360px] overflow-y-auto pr-1">
-            {!canSeeHistory && <p className="text-sm text-slate-500">History is available to check-in roles.</p>}
-            {canSeeHistory && historyLoading && history.length === 0 && <p className="text-sm text-slate-500">Loading history…</p>}
-            {canSeeHistory && !historyLoading && history.length === 0 && <p className="text-sm text-slate-500">No recent actions yet.</p>}
-            {canSeeHistory &&
-              history.map((item) => (
-                <div key={item.id} className="rounded-xl border border-slate-800/80 bg-slate-900/50 p-3 text-sm">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span>{new Date(item.created_at).toLocaleTimeString()}</span>
-                    <span>{item.action}</span>
-                  </div>
-                  <div className="text-base font-semibold text-white">{item.ticket_code ?? '—'}</div>
-                  <div className={item.success ? 'text-emerald-300' : 'text-red-300'}>{item.status}</div>
-                  {item.name && <div className="text-xs text-slate-400">Guest: {item.name}</div>}
-                  {item.user && (
-                    <div className="text-xs text-slate-500">
-                      by {item.user.name} ({item.user.username})
-                    </div>
-                  )}
-                </div>
-              ))}
+          {role >= 4 ? t('dash.noEventsManager') : t('dash.noEventsStaff')}
+        </EmptyState>
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="space-y-6 lg:col-span-2">
+            <EventHero event={current} role={role} />
+            {upcoming.length > 0 && (
+              <Card title={t('dash.otherEvents')}>
+                <ul className="divide-y divide-line">
+                  {upcoming.map((e) => (
+                    <li key={e.id} className="flex flex-wrap items-center justify-between gap-3 py-3 first:pt-0 last:pb-0">
+                      <div className="min-w-0">
+                        <div className="truncate font-semibold">{e.name}</div>
+                        <div className="text-sm text-soft">{e.starts_at ? fmtWeekdayDate(e.starts_at) : t('event.noDate')}</div>
+                      </div>
+                      <button type="button" className="text-sm font-semibold text-accent hover:underline" onClick={() => useCurrentEvent.getState().select(e.id)}>
+                        {t('dash.makeCurrent')}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
           </div>
-        </Card>
-      </div>
+          {role >= 2 && role !== 3 ? <ActivityFeed eventId={current.id} /> : <QuickReport />}
+        </div>
+      )}
     </div>
+  );
+}
+
+function EventHero({ event, role }: { event: EventSummary; role: number }) {
+  const t = useT();
+  const assigned = event.tickets_sold ?? 0;
+  const checkedIn = event.tickets_checked_in ?? 0;
+  const generated = event.tickets_generated ?? 0;
+  const walkIns = event.tickets_walk_in ?? 0;
+  const capacity = event.capacity ?? null;
+  const invitedAssigned = assigned - walkIns;
+
+  return (
+    <section className="overflow-hidden rounded-xl border border-line bg-surface shadow-card">
+      <div className="h-1.5 bg-sky" />
+      <div className="p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="mb-2 flex flex-wrap gap-2">
+              <PhaseBadge startsAt={event.starts_at} endsAt={event.ends_at} />
+              {event.is_public && <Badge tone="accent">{t('event.publicPage')}</Badge>}
+            </div>
+            <h2 className="text-2xl font-bold sm:text-3xl">{event.name}</h2>
+            <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-soft">
+              <span className="inline-flex items-center gap-1.5">
+                <IconCalendar size={16} />
+                {event.starts_at ? `${fmtWeekdayDate(event.starts_at)}, ${fmtTime(event.starts_at)}` : t('event.noDate')}
+              </span>
+              {event.venue && (
+                <span className="inline-flex items-center gap-1.5">
+                  <IconPin size={16} />
+                  {event.venue}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <Figure label={t('stat.assigned')} value={fmtNumber(assigned)} sub={capacity ? t('stat.ofCapacity', { n: fmtNumber(capacity) }) : t('stat.ofGenerated', { n: fmtNumber(generated) })} />
+          <Figure label={t('stat.checkedIn')} value={fmtNumber(checkedIn)} sub={invitedAssigned > 0 ? t('stat.attendance', { p: fmtPercent((checkedIn - walkIns) / invitedAssigned) }) : undefined} />
+          <Figure label={t('stat.walkIns')} value={fmtNumber(walkIns)} />
+          <Figure label={t('stat.free')} value={fmtNumber(Math.max(0, generated - assigned))} sub={t('stat.freeHint')} />
+        </div>
+
+        {capacity ? (
+          <div className="mt-5">
+            <div className="mb-1.5 flex justify-between text-xs font-semibold text-soft">
+              <span>{t('stat.fill')}</span>
+              <span className="tabular">{fmtPercent(assigned / capacity)}</span>
+            </div>
+            <Meter value={assigned} max={capacity} label={t('stat.fill')} />
+          </div>
+        ) : null}
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          {role >= 2 && role !== 3 && (
+            <Link to="/door" className="inline-flex h-11 items-center gap-2 rounded bg-accent px-4 text-sm font-semibold text-onaccent hover:bg-accentstrong">
+              <IconScan size={18} /> {t('dash.openDoor')}
+            </Link>
+          )}
+          {role >= 3 && (
+            <Link to="/assign" className="inline-flex h-11 items-center gap-2 rounded border border-linestrong bg-surface px-4 text-sm font-semibold hover:bg-surface2">
+              <IconTicket size={18} /> {t('dash.assign')}
+            </Link>
+          )}
+          {role >= 4 && (
+            <Link to={`/events/${event.id}`} className="inline-flex h-11 items-center gap-2 rounded border border-linestrong bg-surface px-4 text-sm font-semibold hover:bg-surface2">
+              <IconCalendar size={18} /> {t('dash.manage')}
+            </Link>
+          )}
+          <Link to={`/reports?event=${event.id}`} className="inline-flex h-11 items-center gap-2 rounded border border-linestrong bg-surface px-4 text-sm font-semibold hover:bg-surface2">
+            <IconChart size={18} /> {t('nav.reports')}
+          </Link>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function Figure({ label, value, sub }: { label: string; value: string; sub?: string }) {
+  return (
+    <div className="rounded-lg bg-surface2 p-3">
+      <div className="text-xs font-semibold text-soft">{label}</div>
+      <div className="mt-0.5 text-2xl font-bold">{value}</div>
+      {sub && <div className="text-xs text-soft">{sub}</div>}
+    </div>
+  );
+}
+
+export function ActivityFeed({ eventId, limit = 30 }: { eventId: number | null; limit?: number }) {
+  const t = useT();
+  const [items, setItems] = useState<ActivityItem[] | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      setItems(await api.ticketActivity({ limit, event_id: eventId }));
+    } catch {
+      setItems((prev) => prev ?? []);
+    }
+  }, [eventId, limit]);
+
+  useEffect(() => {
+    setItems(null);
+    load();
+    const id = setInterval(() => document.visibilityState === 'visible' && load(), 6000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  return (
+    <Card title={t('activity.title')} subtitle={t('activity.live')} bodyClassName="p-0">
+      {items === null ? (
+        <Loading />
+      ) : items.length === 0 ? (
+        <p className="px-5 py-8 text-center text-sm text-soft">{t('activity.empty')}</p>
+      ) : (
+        <ul className="scroll-thin max-h-[560px] divide-y divide-line overflow-y-auto">
+          {items.map((it) => (
+            <li key={it.id} className="flex gap-3 px-5 py-3">
+              <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${it.success ? 'bg-ok' : 'bg-danger'}`} aria-hidden />
+              <div className="min-w-0 flex-1">
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="truncate text-sm font-semibold">{activityLabel(t, it)}</span>
+                  <span className="tabular shrink-0 text-xs text-soft">{fmtTime(it.created_at)}</span>
+                </div>
+                <div className="truncate text-xs text-soft">
+                  {it.name ? `${it.name} · ` : ''}
+                  <span className="font-mono">{it.ticket_code ?? '—'}</span>
+                  {it.user ? ` · ${it.user.name}` : ''}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function activityLabel(t: ReturnType<typeof useT>, it: ActivityItem) {
+  const s = it.status.toLowerCase();
+  if (it.action === 'checkin') {
+    if (it.success) return s.includes('walk') ? t('activity.walkIn') : t('activity.checkin');
+    if (s.includes('already')) return t('activity.already');
+    if (s.includes('wrong')) return t('activity.wrongEvent');
+    if (s.includes('not sold')) return t('activity.notSold');
+    return t('activity.notFound');
+  }
+  if (it.action === 'sell') return it.success ? t('activity.assigned') : s.includes('already') ? t('activity.alreadyAssigned') : s.includes('wrong') ? t('activity.wrongEvent') : t('activity.notFound');
+  if (it.action === 'refund') return t('activity.released');
+  return it.success ? t('activity.verifiedOk') : t('activity.verifiedBad');
+}
+
+function QuickReport() {
+  const t = useT();
+  return (
+    <Card title={t('nav.reports')}>
+      <p className="text-sm text-soft">{t('dash.viewerHint')}</p>
+      <Link to="/reports" className="mt-4 inline-flex h-10 items-center rounded bg-accent px-4 text-sm font-semibold text-onaccent">
+        {t('dash.openReports')}
+      </Link>
+    </Card>
   );
 }

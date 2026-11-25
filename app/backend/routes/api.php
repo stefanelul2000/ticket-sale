@@ -1,51 +1,49 @@
 <?php
 
 use App\Http\Controllers\EventController;
-use App\Http\Controllers\PermissionController;
-use App\Http\Controllers\RoleController;
+use App\Http\Controllers\ImpersonationController;
+use App\Http\Controllers\PrintTemplateController;
+use App\Http\Controllers\PublicController;
+use App\Http\Controllers\ReportController;
+use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SetupController;
+use App\Http\Controllers\TicketActivityController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketTypeController;
 use App\Http\Controllers\UserController;
-use App\Http\Controllers\BrandingController;
-use App\Http\Controllers\TicketActivityController;
-use App\Models\Role;
-use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 
+/*
+| Role levels: 1 Viewer (reports), 2 Door (check-in), 3 Volunteer (assigns invitations),
+| 4 Event manager, 5 Admin, 6 Site owner.
+| "role:N" = level N or higher; extra parameters are excluded levels ("role:2,3" = 2+ except volunteers).
+*/
+
+// ---------- Public (no login, no session/cookies: unaffected by staff login state) ----------
+Route::middleware('throttle:public')
+    ->withoutMiddleware([\Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class])
+    ->prefix('public')
+    ->group(function () {
+    Route::get('/settings', [PublicController::class, 'settings']);
+    Route::get('/events', [PublicController::class, 'events']);
+    Route::get('/events/{slug}', [PublicController::class, 'event'])->where('slug', '[a-z0-9-]{1,190}');
+    Route::get('/tickets/{code}', [PublicController::class, 'ticket'])->where('code', '[A-Za-z0-9_-]{1,32}');
+});
+
+// First-run setup (self-locking once an admin exists).
 Route::get('/setup/status', [SetupController::class, 'status']);
-Route::post('/setup', [SetupController::class, 'create']);
-Route::post('/setup/logo', [SetupController::class, 'uploadLogo']);
-Route::post('/setup/migrate', [SetupController::class, 'migrate']);
-Route::post('/setup/test-db', [SetupController::class, 'testDatabase']);
+Route::middleware('throttle:10,1')->group(function () {
+    Route::post('/setup', [SetupController::class, 'create']);
+    Route::post('/setup/test-db', [SetupController::class, 'testDatabase']);
+});
 
-Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
-    Route::get('/me', function (Request $request) {
-        $user = $request->user();
-        if (! $user) {
-            return null;
-        }
+// ---------- Staff ----------
+Route::middleware(['auth:sanctum', 'active', 'impersonate'])->group(function () {
+    Route::get('/me', [ImpersonationController::class, 'me']);
+    Route::delete('/impersonate', [ImpersonationController::class, 'stop']);
 
-        $user->loadMissing('role');
-        $user->setAttribute('original_role_id', $user->role_id);
-        if ($user->relationLoaded('role')) {
-            $user->setRelation('original_role', $user->role);
-        }
-
-        $impersonatedRoleId = $request->session()->get('impersonate_role_id');
-        if ($impersonatedRoleId) {
-            $role = Role::find($impersonatedRoleId);
-            if ($role) {
-                $user->setAttribute('impersonating', true);
-                $user->setAttribute('role_id', $role->id);
-                $user->setRelation('role', $role);
-            }
-        }
-
-        return $user;
-    });
-
-    // Roles and users (admin / owner only)
+    // Admin / site owner
     Route::middleware('role:5')->group(function () {
         Route::get('/roles', [UserController::class, 'roles']);
         Route::get('/users', [UserController::class, 'index']);
@@ -55,36 +53,27 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
         Route::patch('/users/{userId}/status', [UserController::class, 'updateStatus']);
         Route::delete('/users/{userId}', [UserController::class, 'destroy']);
 
-        // fine-grained permissions
-        Route::get('/permissions', [PermissionController::class, 'index']);
-        Route::get('/roles/with-permissions', [RoleController::class, 'index']);
-        Route::post('/roles/{roleId}/permissions', [RoleController::class, 'updatePermissions']);
+        Route::post('/impersonate', [ImpersonationController::class, 'start'])->middleware('forbid.impersonation.targets');
 
-        // impersonation (admin only to start)
-        Route::post('/impersonate', function (Request $request) {
-            $data = $request->validate([
-                'role_id' => ['required', 'integer', 'exists:roles,id'],
-            ]);
-            $request->session()->put('impersonate_role_id', $data['role_id']);
-            \Illuminate\Support\Facades\DB::table('admin_logs')->insert([
-                'user_id' => $request->user()?->id,
-                'action' => 'impersonate.start',
-                'details' => json_encode(['role_id' => $data['role_id']]),
-                'created_at' => now(),
-            ]);
-            return response()->json(['impersonating' => $data['role_id']]);
-        })->middleware('forbid.impersonation.targets');
-
-        Route::post('/branding', [BrandingController::class, 'update']);
+        Route::get('/settings', [SettingsController::class, 'show']);
+        Route::put('/settings', [SettingsController::class, 'update']);
+        Route::post('/setup/migrate', [SetupController::class, 'migrate']);
+        Route::delete('/ticket-activity', [TicketActivityController::class, 'destroy']);
     });
 
-    // Event manager (role >=4) can manage events, ticket types, and ticket generation/export
+    // Event manager: events, ticket types, generation, guest lists, exports, releasing tickets
     Route::middleware('role:4')->group(function () {
         Route::get('/events', [EventController::class, 'index']);
         Route::post('/events', [EventController::class, 'store']);
-        Route::patch('/events/{eventId}', [EventController::class, 'update']);
-        Route::delete('/events/{eventId}', [EventController::class, 'destroy']);
-        Route::get('/events/{event}/tickets', [TicketController::class, 'export']);
+        Route::get('/events/{eventId}', [EventController::class, 'show'])->whereNumber('eventId');
+        Route::patch('/events/{eventId}', [EventController::class, 'update'])->whereNumber('eventId');
+        Route::delete('/events/{eventId}', [EventController::class, 'destroy'])->whereNumber('eventId');
+        Route::post('/events/{eventId}/duplicate', [EventController::class, 'duplicate'])->whereNumber('eventId');
+        Route::get('/events/{event}/tickets', [TicketController::class, 'export'])->whereNumber('event');
+        Route::post('/events/{eventId}/assign-list', [TicketController::class, 'assignList'])->whereNumber('eventId');
+        Route::post('/events/{eventId}/template', [PrintTemplateController::class, 'upload'])->whereNumber('eventId');
+        Route::put('/events/{eventId}/template', [PrintTemplateController::class, 'update'])->whereNumber('eventId');
+        Route::delete('/events/{eventId}/template', [PrintTemplateController::class, 'destroy'])->whereNumber('eventId');
 
         Route::get('/ticket-types', [TicketTypeController::class, 'index']);
         Route::post('/ticket-types', [TicketTypeController::class, 'store']);
@@ -92,53 +81,52 @@ Route::middleware(['auth:sanctum', 'impersonate'])->group(function () {
         Route::delete('/ticket-types/{ticketTypeId}', [TicketTypeController::class, 'destroy']);
 
         Route::post('/tickets/generate', [TicketController::class, 'generate']);
-        Route::post('/tickets/{ticketNumber}/refund', [TicketController::class, 'refund']);
+        Route::post('/tickets/{ticketCode}/refund', [TicketController::class, 'refund']);
+
+        Route::get('/reports/repeat-guests', [ReportController::class, 'repeatGuests']);
     });
 
-    // Ticket flows
-    Route::middleware('role:2')->group(function () {
+    // Reports (aggregates only): every staff role
+    Route::middleware('role:1')->group(function () {
         Route::get('/events/summary', [EventController::class, 'summary']);
-        Route::get('/tickets', [TicketController::class, 'index']);
-        Route::get('/tickets/{ticketNumber}/verify', [TicketController::class, 'verify']);
-        Route::post('/tickets/{ticketNumber}/checkin', [TicketController::class, 'checkin']);
-        Route::get('/ticket-activity', [TicketActivityController::class, 'index']);
-        Route::delete('/ticket-activity', [TicketActivityController::class, 'destroy']);
-    });
-
-    Route::middleware('role:3')->group(function () {
-        // Sellers can sell; they are blocked from verify/check-in by role:2 gate above
-        Route::post('/tickets/{ticketNumber}/sell', [TicketController::class, 'sell']);
-    });
-
-    // Stats visible from check-in and up
-    Route::middleware('role:2')->group(function () {
+        Route::get('/reports/overview', [ReportController::class, 'overview']);
+        Route::get('/reports/events/{eventId}', [ReportController::class, 'event'])->whereNumber('eventId');
         Route::get('/stats', [TicketController::class, 'stats']);
     });
 
-    // Stop impersonation: allow any authenticated user who is currently impersonating to stop, regardless of impersonated role.
-    Route::delete('/impersonate', function (Request $request) {
-        if (! $request->session()->has('impersonate_role_id')) {
-            return response()->json(['impersonating' => null]);
-        }
-        $roleId = $request->session()->pull('impersonate_role_id');
-        \Illuminate\Support\Facades\DB::table('admin_logs')->insert([
-            'user_id' => $request->user()?->id,
-            'action' => 'impersonate.stop',
-            'details' => json_encode(['role_id' => $roleId]),
-            'created_at' => now(),
-        ]);
-        return response()->json(['impersonating' => null]);
+    // Guest lists and live activity (door staff, managers, admins — not volunteers)
+    Route::middleware('role:2,3')->group(function () {
+        Route::get('/tickets', [TicketController::class, 'index']);
+        Route::get('/ticket-activity', [TicketActivityController::class, 'index']);
+    });
+
+    // Door: verify / check-in / walk-ins (door staff, managers, admins — not volunteers)
+    Route::middleware('role:2,3')->group(function () {
+        Route::get('/tickets/{ticketCode}/verify', [TicketController::class, 'verify']);
+        Route::post('/tickets/{ticketCode}/checkin', [TicketController::class, 'checkin']);
+        Route::post('/events/{eventId}/walk-in', [TicketController::class, 'walkIn'])->whereNumber('eventId');
+    });
+
+    // Assigning invitations (volunteers and up)
+    Route::middleware('role:3')->group(function () {
+        Route::post('/tickets/{ticketCode}/sell', [TicketController::class, 'sell']);
+        Route::patch('/tickets/{ticketCode}', [TicketController::class, 'update']);
     });
 });
 
-// Public branding (shared across all users)
-Route::get('/branding', [BrandingController::class, 'show']);
-
 Route::get('/health', function () {
+    try {
+        DB::connection()->getPdo();
+        $db = 'ok';
+    } catch (\Throwable $e) {
+        $db = 'unreachable';
+    }
+
     return response()->json([
-        'status' => 'ok',
+        'status' => $db === 'ok' ? 'ok' : 'degraded',
+        'database' => $db,
         'timestamp' => now(),
-    ]);
+    ], $db === 'ok' ? 200 : 503);
 });
 
 require __DIR__.'/auth.php';

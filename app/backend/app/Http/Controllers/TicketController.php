@@ -4,24 +4,64 @@ namespace App\Http\Controllers;
 
 use App\Models\Event;
 use App\Models\Ticket;
-use App\Models\TicketType;
 use App\Models\TicketActivityLog;
+use App\Models\TicketType;
+use App\Support\GuestCategory;
+use App\Support\TicketCode;
+use App\Support\TicketIssuer;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
-use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 class TicketController extends Controller
 {
     public function index(Request $request)
     {
-        $query = Ticket::with(['event', 'seller'])
+        $request->validate([
+            'event_id' => ['nullable', 'integer'],
+            'status' => ['nullable', 'in:assigned,unassigned,checked_in,not_checked_in,walk_in'],
+            'category' => ['nullable', 'string', 'max:32'],
+            'search' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:2000'],
+            'sort' => ['nullable', 'in:number,name,assigned,checked_in'],
+        ]);
+
+        $query = Ticket::with(['event:id,name', 'ticketType:id,name,kind', 'seller:id,name,username', 'checkedInBy:id,name'])
             ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')))
-            ->orderBy('ticket_number');
+            ->when($request->filled('category'), fn ($q) => $request->get('category') === 'none'
+                ? $q->whereNotNull('sold_at')->whereNull('guest_category')
+                : $q->where('guest_category', $request->get('category')))
+            ->when($request->get('status'), function ($q, $status) {
+                match ($status) {
+                    'assigned' => $q->whereNotNull('sold_at'),
+                    'unassigned' => $q->whereNull('sold_at'),
+                    'checked_in' => $q->where('checkin', true),
+                    'not_checked_in' => $q->whereNotNull('sold_at')->where('checkin', false),
+                    'walk_in' => $q->where('is_walk_in', true),
+                };
+            })
+            ->when($request->filled('search'), function ($q) use ($request) {
+                $term = trim((string) $request->get('search'));
+                $code = TicketCode::normalize($term);
+                $q->where(function ($inner) use ($term, $code) {
+                    $inner->where('ticket_code', $code)
+                        ->orWhere('name', 'like', '%'.addcslashes($term, '%_\\').'%');
+                    if (ctype_digit($term)) {
+                        $inner->orWhere('ticket_number', (int) $term);
+                    }
+                });
+            })
+            ->orderBy('event_id');
 
-        $perPage = max(1, min(2000, (int) $request->get('per_page', 50)));
+        match ($request->get('sort', 'number')) {
+            'name' => $query->orderByRaw('name is null')->orderBy('name')->orderBy('ticket_number'),
+            'assigned' => $query->orderByRaw('sold_at is null')->orderByDesc('sold_at')->orderBy('ticket_number'),
+            'checked_in' => $query->orderByRaw('checked_in_at is null')->orderByDesc('checked_in_at')->orderBy('ticket_number'),
+            default => $query->orderBy('ticket_number'),
+        };
 
-        return $query->paginate($perPage);
+        return $query->paginate((int) $request->get('per_page', 50));
     }
 
     public function generate(Request $request)
@@ -33,57 +73,143 @@ class TicketController extends Controller
         ]);
 
         $ticketType = TicketType::findOrFail($data['ticket_type_id']);
-        $event = $data['event_id'] ? Event::findOrFail($data['event_id']) : $ticketType->event;
-        if ($ticketType->event_id !== $event->id) {
-            return response()->json(['message' => 'Ticket type does not belong to selected event'], 422);
-        }
-        $lastNumber = Ticket::where('event_id', $event->id)->max('ticket_number') ?? 0;
-        $start = $lastNumber + 1;
-
-        if (! is_null($event->capacity) && ($lastNumber + $data['count'] > $event->capacity)) {
-            return response()->json([
-                'message' => 'Requested tickets exceed event capacity.',
-                'remaining' => max(0, $event->capacity - $lastNumber),
-            ], 422);
+        $eventId = $data['event_id'] ?? $ticketType->event_id;
+        if ((int) $ticketType->event_id !== (int) $eventId) {
+            return response()->json(['message' => __('Ticket type does not belong to selected event.')], 422);
         }
 
-        $numbers = range($start, $start + $data['count'] - 1);
-        $width = $event->capacity ? max(3, strlen((string) $event->capacity)) : 3;
-        $codes = [];
+        $count = (int) $data['count'];
 
-        DB::transaction(function () use ($numbers, $event, $ticketType, $width, &$codes) {
-            foreach ($numbers as $number) {
-                $code = $event->id . '_' . str_pad((string) $number, max(3, strlen((string) $number)), '0', STR_PAD_LEFT);
-                Ticket::firstOrCreate([
-                    'event_id' => $event->id,
-                    'ticket_type_id' => $ticketType->id,
-                    'ticket_number' => $number,
-                    'ticket_code' => $code,
-                ]);
-                $codes[] = $code;
+        $result = DB::transaction(function () use ($eventId, $ticketType, $count) {
+            $event = Event::whereKey($eventId)->lockForUpdate()->firstOrFail();
+
+            $remaining = TicketIssuer::remaining($event, $ticketType);
+            if (! is_null($remaining) && $count > $remaining) {
+                return response()->json([
+                    'message' => __('Only :n more tickets fit within the capacity.', ['n' => $remaining]),
+                    'remaining' => $remaining,
+                ], 422);
             }
+
+            return ['event' => $event, 'tickets' => TicketIssuer::issue($event, $ticketType, $count)];
         });
 
-        $startCode = str_pad((string) $start, $width, '0', STR_PAD_LEFT);
-        $endCode = str_pad((string) ($start + count($numbers) - 1), $width, '0', STR_PAD_LEFT);
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
+
+        $tickets = $result['tickets'];
+        $start = $tickets[0]['ticket_number'];
+        $end = $tickets[count($tickets) - 1]['ticket_number'];
 
         $this->logAdminAction($request->user()?->id, 'ticket.generate', [
-            'event_id' => $event->id,
+            'event_id' => $result['event']->id,
             'ticket_type_id' => $ticketType->id,
-            'count' => count($numbers),
+            'count' => $count,
             'start' => $start,
-            'end' => $start + count($numbers) - 1,
+            'end' => $end,
         ]);
 
         return response()->json([
-            'generated' => count($numbers),
+            'generated' => $count,
             'start' => $start,
-            'end' => $start + count($numbers) - 1,
-            'event_id' => $event->id,
-            'start_code' => $event->id . '_' . $startCode,
-            'end_code' => $event->id . '_' . $endCode,
-            'codes' => $codes,
+            'end' => $end,
+            'event_id' => $result['event']->id,
+            'codes' => array_column($tickets, 'ticket_code'),
         ]);
+    }
+
+    /**
+     * Assign a list of guest names to invitations (for personalised printing).
+     * Uses unassigned tickets of the type in number order; optionally issues missing ones.
+     */
+    public function assignList(Request $request, int $eventId)
+    {
+        $data = $request->validate([
+            'ticket_type_id' => ['required', 'integer', 'exists:ticket_types,id'],
+            'generate_missing' => ['boolean'],
+            'entries' => ['required', 'array', 'min:1', 'max:2000'],
+            'entries.*.name' => ['required', 'string', 'max:255'],
+            'entries.*.guest_category' => ['nullable', GuestCategory::rule()],
+        ]);
+
+        $type = TicketType::findOrFail($data['ticket_type_id']);
+        if ((int) $type->event_id !== $eventId) {
+            return response()->json(['message' => __('Ticket type does not belong to selected event.')], 422);
+        }
+
+        $entries = array_values($data['entries']);
+        $userId = $request->user()->id;
+
+        $result = DB::transaction(function () use ($eventId, $type, $entries, $data, $userId) {
+            $event = Event::whereKey($eventId)->lockForUpdate()->firstOrFail();
+
+            $free = Ticket::where('ticket_type_id', $type->id)
+                ->whereNull('sold_at')
+                ->where('checkin', false)
+                ->orderBy('ticket_number')
+                ->limit(count($entries))
+                ->lockForUpdate()
+                ->get(['id', 'ticket_code', 'ticket_number']);
+
+            $missing = count($entries) - $free->count();
+            if ($missing > 0) {
+                if (! ($data['generate_missing'] ?? false)) {
+                    return response()->json([
+                        'message' => __('Not enough unassigned tickets: :n missing.', ['n' => $missing]),
+                        'missing' => $missing,
+                    ], 422);
+                }
+                $remaining = TicketIssuer::remaining($event, $type);
+                if (! is_null($remaining) && $missing > $remaining) {
+                    return response()->json([
+                        'message' => __('Only :n more tickets fit within the capacity.', ['n' => $remaining]),
+                        'remaining' => $remaining,
+                    ], 422);
+                }
+                TicketIssuer::issue($event, $type, $missing);
+                $free = Ticket::where('ticket_type_id', $type->id)
+                    ->whereNull('sold_at')
+                    ->where('checkin', false)
+                    ->orderBy('ticket_number')
+                    ->limit(count($entries))
+                    ->lockForUpdate()
+                    ->get(['id', 'ticket_code', 'ticket_number']);
+            }
+
+            $now = Carbon::now();
+            $assigned = [];
+            foreach ($entries as $i => $entry) {
+                $ticket = $free[$i];
+                Ticket::whereKey($ticket->id)->update([
+                    'name' => trim($entry['name']),
+                    'guest_category' => $entry['guest_category'] ?? null,
+                    'user_id' => $userId,
+                    'sold_at' => $now,
+                    'updated_at' => $now,
+                ]);
+                $assigned[] = [
+                    'ticket_code' => $ticket->ticket_code,
+                    'ticket_number' => $ticket->ticket_number,
+                    'name' => trim($entry['name']),
+                    'guest_category' => $entry['guest_category'] ?? null,
+                ];
+            }
+
+            return $assigned;
+        });
+
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
+
+        $this->logAdminAction($userId, 'ticket.assign_list', [
+            'event_id' => $eventId,
+            'ticket_type_id' => $type->id,
+            'count' => count($result),
+        ]);
+
+        return response()->json(['assigned' => count($result), 'tickets' => $result]);
     }
 
     public function export(Request $request, Event $event)
@@ -92,16 +218,28 @@ class TicketController extends Controller
             'ticket_type_id' => ['nullable', 'integer', 'exists:ticket_types,id'],
         ]);
 
-        $query = Ticket::where('event_id', $event->id)
+        $tickets = Ticket::with('ticketType:id,name')
+            ->where('event_id', $event->id)
             ->when($data['ticket_type_id'] ?? null, fn ($q, $tt) => $q->where('ticket_type_id', $tt))
-            ->orderBy('ticket_number');
-
-        $tickets = $query->get(['ticket_code', 'ticket_number', 'ticket_type_id', 'event_id', 'name', 'sold_at', 'checkin']);
+            ->orderBy('ticket_number')
+            ->get(['id', 'ticket_code', 'ticket_number', 'ticket_type_id', 'name', 'guest_category', 'sold_at', 'checkin', 'checked_in_at', 'is_walk_in']);
 
         return response()->json([
-            'event' => $event->only(['id', 'name']),
+            'event' => $event->only(['id', 'name', 'slug', 'starts_at', 'venue', 'city']),
             'count' => $tickets->count(),
             'codes' => $tickets->pluck('ticket_code'),
+            'tickets' => $tickets->map(fn (Ticket $t) => [
+                'ticket_code' => $t->ticket_code,
+                'ticket_number' => $t->ticket_number,
+                'ticket_type' => $t->ticketType?->name,
+                'name' => $t->name,
+                'guest_category' => $t->guest_category,
+                'sold' => $t->isSold(),
+                'sold_at' => $t->sold_at,
+                'checkin' => $t->checkin,
+                'checked_in_at' => $t->checked_in_at,
+                'is_walk_in' => $t->is_walk_in,
+            ])->values(),
         ]);
     }
 
@@ -109,41 +247,136 @@ class TicketController extends Controller
     {
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'guest_category' => ['nullable', GuestCategory::rule()],
+            'event_id' => ['required', 'integer'],
+        ]);
+        $name = trim($data['name']);
+
+        $ticket = $this->findTicketByCode($ticketCode);
+        if (! $ticket) {
+            $this->recordActivity($request, 'sell', TicketCode::normalize($ticketCode), 'Ticket not found.', false);
+
+            return response()->json(['message' => __('Ticket not found.'), 'result' => 'not_found'], 404);
+        }
+
+        if ($wrong = $this->wrongEvent($ticket, (int) $data['event_id'])) {
+            $this->recordActivity($request, 'sell', $ticket->ticket_code, 'Wrong event.', false);
+
+            return $wrong;
+        }
+
+        // Atomic: only one volunteer can win the race for an unassigned ticket.
+        $updated = Ticket::whereKey($ticket->id)
+            ->whereNull('sold_at')
+            ->update([
+                'name' => $name,
+                'guest_category' => $data['guest_category'] ?? null,
+                'user_id' => $request->user()->id,
+                'sold_at' => Carbon::now(),
+                'updated_at' => Carbon::now(),
+            ]);
+
+        if ($updated === 0) {
+            $ticket->refresh();
+            $this->recordActivity($request, 'sell', $ticket->ticket_code, 'Ticket already sold.', false, $ticket->name);
+
+            return response()->json([
+                'message' => $ticket->name
+                    ? __('Ticket already assigned to :name.', ['name' => $ticket->name])
+                    : __('Ticket already assigned.'),
+                'result' => 'already_assigned',
+            ], 409);
+        }
+
+        $ticket->refresh();
+        $this->recordActivity($request, 'sell', $ticket->ticket_code, 'Sold', true, $name);
+
+        return response()->json($this->present($ticket));
+    }
+
+    /**
+     * Fix the guest name / category of an assigned ticket.
+     */
+    public function update(Request $request, string $ticketCode)
+    {
+        $data = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'guest_category' => ['sometimes', 'nullable', GuestCategory::rule()],
         ]);
 
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
-            $this->recordActivity($request, 'sell', $ticketCode, 'Ticket not found.', false);
-            throw new NotFoundHttpException('Ticket not found');
+            return response()->json(['message' => __('Ticket not found.')], 404);
+        }
+        if (! $ticket->isSold()) {
+            return response()->json(['message' => __('Ticket is not assigned yet.')], 409);
         }
 
-        if (! is_null($ticket->sold_at)) {
-            $this->recordActivity($request, 'sell', $ticket->ticket_code, 'Ticket already sold.', false, $ticket->name);
-            return response()->json(['message' => 'Ticket already sold.'], 409);
+        $actor = $request->user();
+        if ((int) $actor->role_id < 4) {
+            // Volunteers fix only their own, not-yet-used assignments.
+            if ((int) $ticket->user_id !== (int) $actor->id || $ticket->checkin) {
+                return response()->json(['message' => __('Only the volunteer who assigned this invitation (or a manager) can change it.')], 403);
+            }
         }
 
-        $ticket->update(array_merge($data, [
-            'user_id' => $request->user()->id,
-            'sold_at' => Carbon::now(),
-        ]));
+        $before = $ticket->only(['name', 'guest_category']);
+        if (array_key_exists('name', $data)) {
+            $data['name'] = trim($data['name']);
+        }
+        $data['updated_at'] = Carbon::now();
+        // Atomic: never write a name onto a ticket that was released meanwhile.
+        $updated = Ticket::whereKey($ticket->id)->whereNotNull('sold_at')->update($data);
+        if ($updated === 0) {
+            return response()->json(['message' => __('Ticket changed meanwhile; reload and try again.')], 409);
+        }
+        $ticket->refresh();
 
-        $this->recordActivity($request, 'sell', $ticket->ticket_code, 'Sold', true, $data['name'] ?? null);
+        $this->logAdminAction($actor->id, 'ticket.update', [
+            'ticket_code' => $ticket->ticket_code,
+            'before' => $before,
+            'after' => $ticket->only(['name', 'guest_category']),
+            'event_id' => $ticket->event_id,
+        ]);
 
-        return response()->json($ticket);
+        return response()->json($this->present($ticket));
     }
 
-    public function refund(string $ticketCode)
+    public function refund(Request $request, string $ticketCode)
     {
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
-            throw new NotFoundHttpException('Ticket not found');
+            return response()->json(['message' => __('Ticket not found.')], 404);
         }
 
-        $ticket->update([
-            'user_id' => null,
-            'name' => null,
-            'sold_at' => null,
-            'checkin' => false,
+        if (! $ticket->isSold()) {
+            return response()->json(['message' => __('Ticket is not assigned yet.')], 409);
+        }
+
+        if ($ticket->checkin) {
+            return response()->json(['message' => __('Ticket was already used for check-in and cannot be released.')], 409);
+        }
+
+        $previousName = $ticket->name;
+        $updated = Ticket::whereKey($ticket->id)
+            ->whereNotNull('sold_at')
+            ->where('checkin', false)
+            ->update([
+                'user_id' => null,
+                'name' => null,
+                'guest_category' => null,
+                'sold_at' => null,
+                'updated_at' => Carbon::now(),
+            ]);
+
+        if ($updated === 0) {
+            return response()->json(['message' => __('Ticket changed meanwhile; reload and try again.')], 409);
+        }
+
+        $this->recordActivity($request, 'refund', $ticket->ticket_code, 'Released', true, $previousName);
+        $this->logAdminAction($request->user()?->id, 'ticket.refund', [
+            'ticket_code' => $ticket->ticket_code,
+            'name' => $previousName,
         ]);
 
         return response()->json(['refunded' => true]);
@@ -151,79 +384,231 @@ class TicketController extends Controller
 
     public function checkin(Request $request, string $ticketCode)
     {
+        // The door is always bound to one event: a ticket for another event never gets in.
+        $eventId = (int) $request->validate(['event_id' => ['required', 'integer']])['event_id'];
+
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
-            $this->recordActivity($request, 'checkin', $ticketCode, 'Ticket not found.', false);
-            throw new NotFoundHttpException('Ticket not found');
+            $this->recordActivity($request, 'checkin', TicketCode::normalize($ticketCode), 'Ticket not found.', false);
+
+            return response()->json(['message' => __('Ticket not found.'), 'result' => 'not_found'], 404);
         }
 
-        if ($ticket->checkin) {
-            $this->recordActivity($request, 'checkin', $ticket->ticket_code, 'Ticket already checked in.', false, $ticket->name);
-            return response()->json(['message' => 'Ticket already checked in.'], 409);
+        if ($wrong = $this->wrongEvent($ticket, $eventId)) {
+            $this->recordActivity($request, 'checkin', $ticket->ticket_code, 'Wrong event.', false, $ticket->name);
+
+            return $wrong;
         }
 
-        $ticket->update(['checkin' => true]);
+        if (! $ticket->isSold()) {
+            $this->recordActivity($request, 'checkin', $ticket->ticket_code, 'Not sold — entry refused.', false);
+
+            return response()->json([
+                'message' => __('Invitation not assigned to anyone. Entry refused.'),
+                'result' => 'not_sold',
+                'ticket' => $this->present($ticket),
+            ], 409);
+        }
+
+        // Atomic: two scanners scanning the same ticket at once cannot both succeed.
+        $now = Carbon::now();
+        $updated = Ticket::whereKey($ticket->id)
+            ->whereNotNull('sold_at')
+            ->where('checkin', false)
+            ->update([
+                'checkin' => true,
+                'checked_in_at' => $now,
+                'checked_in_by' => $request->user()->id,
+                'updated_at' => $now,
+            ]);
+
+        $ticket->refresh();
+
+        if ($updated === 0) {
+            $when = $ticket->checked_in_at?->timezone(config('app.timezone'))->format('H:i');
+            $this->recordActivity($request, 'checkin', $ticket->ticket_code, 'Already checked in'.($when ? " at {$when}" : '').'.', false, $ticket->name);
+
+            return response()->json([
+                'message' => $when
+                    ? __('Ticket already checked in at :time.', ['time' => $when])
+                    : __('Ticket already checked in.'),
+                'result' => 'already_checked_in',
+                'ticket' => $this->present($ticket),
+            ], 409);
+        }
 
         $this->recordActivity($request, 'checkin', $ticket->ticket_code, 'Checked in', true, $ticket->name);
 
-        return response()->json(['checked_in' => true]);
+        return response()->json([
+            'checked_in' => true,
+            'result' => 'ok',
+            'ticket' => $this->present($ticket),
+        ]);
     }
 
     public function verify(Request $request, string $ticketCode)
     {
+        $eventId = (int) $request->validate(['event_id' => ['required', 'integer']])['event_id'];
+
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
-            $this->recordActivity($request, 'verify', $ticketCode, 'Ticket not found.', false);
-            throw new NotFoundHttpException('Ticket not found');
+            $this->recordActivity($request, 'verify', TicketCode::normalize($ticketCode), 'Ticket not found.', false);
+
+            return response()->json(['message' => __('Ticket not found.'), 'result' => 'not_found'], 404);
         }
 
-        $this->recordActivity(
-            $request,
-            'verify',
-            $ticket->ticket_code,
-            $ticket->checkin ? 'Already checked-in' : 'Valid',
-            true,
-            $ticket->name,
-        );
+        if ($wrong = $this->wrongEvent($ticket, $eventId)) {
+            $this->recordActivity($request, 'verify', $ticket->ticket_code, 'Wrong event.', false, $ticket->name);
 
-        return response()->json($ticket);
+            return $wrong;
+        }
+
+        $status = match (true) {
+            ! $ticket->isSold() => 'Not sold',
+            $ticket->checkin => 'Already checked in',
+            default => 'Valid',
+        };
+
+        $this->recordActivity($request, 'verify', $ticket->ticket_code, $status, $ticket->isSold() && ! $ticket->checkin, $ticket->name);
+
+        return response()->json($this->present($ticket));
     }
 
-    public function stats()
+    /**
+     * Guest without an invitation admitted at the door: issue a new ticket, assign and check in.
+     * Never consumes printed invitations.
+     */
+    public function walkIn(Request $request, int $eventId)
     {
-        $total = Ticket::count();
-        $sold = Ticket::whereNotNull('sold_at')->count();
-        $unsold = $total - $sold;
-        $checkedIn = Ticket::where('checkin', true)->count();
+        $data = $request->validate([
+            'name' => ['nullable', 'string', 'max:255'],
+            'guest_category' => ['nullable', GuestCategory::rule()],
+            'ticket_type_id' => ['nullable', 'integer', 'exists:ticket_types,id'],
+        ]);
+
+        $userId = $request->user()->id;
+
+        $result = DB::transaction(function () use ($eventId, $data, $userId) {
+            $event = Event::whereKey($eventId)->lockForUpdate()->firstOrFail();
+
+            $type = isset($data['ticket_type_id'])
+                ? TicketType::where('event_id', $event->id)->find($data['ticket_type_id'])
+                : TicketType::where('event_id', $event->id)->orderBy('sort')->orderBy('id')->first();
+            if (! $type) {
+                return response()->json(['message' => __('This event has no ticket type yet.')], 422);
+            }
+
+            if (! is_null($event->capacity)) {
+                $present = Ticket::where('event_id', $event->id)->whereNotNull('sold_at')->count();
+                if ($present >= $event->capacity) {
+                    return response()->json(['message' => __('The event is full (capacity reached).'), 'result' => 'full'], 409);
+                }
+            }
+
+            $now = Carbon::now();
+            $issued = TicketIssuer::issue($event, $type, 1, [
+                'name' => isset($data['name']) && trim($data['name']) !== '' ? trim($data['name']) : null,
+                'guest_category' => $data['guest_category'] ?? null,
+                'user_id' => $userId,
+                'sold_at' => $now,
+                'checkin' => true,
+                'checked_in_at' => $now,
+                'checked_in_by' => $userId,
+                'is_walk_in' => true,
+            ]);
+
+            return Ticket::where('ticket_code', $issued[0]['ticket_code'])->firstOrFail();
+        });
+
+        if ($result instanceof JsonResponse) {
+            return $result;
+        }
+
+        $this->recordActivity($request, 'checkin', $result->ticket_code, 'Walk-in', true, $result->name);
+
+        return response()->json(['result' => 'ok', 'ticket' => $this->present($result)], 201);
+    }
+
+    public function stats(Request $request)
+    {
+        $base = Ticket::query()
+            ->when($request->filled('event_id'), fn ($q) => $q->where('event_id', $request->integer('event_id')));
+
+        $row = (clone $base)
+            ->selectRaw('count(*) as total')
+            ->selectRaw('sum(case when sold_at is not null then 1 else 0 end) as sold')
+            ->selectRaw('sum(case when checkin = 1 then 1 else 0 end) as checked_in')
+            ->selectRaw('sum(case when is_walk_in = 1 then 1 else 0 end) as walk_ins')
+            ->first();
+
+        $total = (int) ($row->total ?? 0);
+        $sold = (int) ($row->sold ?? 0);
 
         return response()->json([
             'total' => $total,
             'sold' => $sold,
-            'unsold' => $unsold,
-            'checked_in' => $checkedIn,
+            'unsold' => $total - $sold,
+            'checked_in' => (int) ($row->checked_in ?? 0),
+            'walk_ins' => (int) ($row->walk_ins ?? 0),
         ]);
+    }
+
+    private function wrongEvent(Ticket $ticket, ?int $eventId): ?JsonResponse
+    {
+        if (! $eventId || (int) $ticket->event_id === $eventId) {
+            return null;
+        }
+
+        $ticket->loadMissing('event:id,name');
+
+        return response()->json([
+            'message' => __('This ticket is for another event: :event.', ['event' => $ticket->event?->name ?? '?']),
+            'result' => 'wrong_event',
+            'ticket' => $this->present($ticket),
+        ], 409);
     }
 
     private function findTicketByCode(string $input): ?Ticket
     {
-        return Ticket::where('ticket_code', $input)->first();
+        $code = TicketCode::normalize($input);
+        if ($code === '') {
+            return null;
+        }
+
+        return Ticket::where('ticket_code', $code)->first();
     }
 
-    private function recordActivity(Request $request, string $action, ?string $ticketCode, string $status, bool $success, ?string $name = null, array $context = []): void
+    private function present(Ticket $ticket): array
     {
-        $payload = [
+        $ticket->loadMissing(['event:id,name', 'ticketType:id,name,kind', 'checkedInBy:id,name']);
+
+        return [
+            'id' => $ticket->id,
+            'ticket_code' => $ticket->ticket_code,
+            'ticket_number' => $ticket->ticket_number,
+            'event' => $ticket->event?->only(['id', 'name']),
+            'ticket_type' => $ticket->ticketType?->only(['id', 'name', 'kind']),
+            'name' => $ticket->name,
+            'guest_category' => $ticket->guest_category,
+            'sold' => $ticket->isSold(),
+            'sold_at' => $ticket->sold_at,
+            'checkin' => $ticket->checkin,
+            'checked_in_at' => $ticket->checked_in_at,
+            'checked_in_by' => $ticket->checkedInBy?->name,
+            'is_walk_in' => (bool) $ticket->is_walk_in,
+        ];
+    }
+
+    private function recordActivity(Request $request, string $action, ?string $ticketCode, string $status, bool $success, ?string $name = null): void
+    {
+        TicketActivityLog::create([
             'user_id' => $request->user()?->id,
-            'ticket_code' => $ticketCode,
+            'event_id' => $ticketCode !== null ? Ticket::where('ticket_code', $ticketCode)->value('event_id') : null,
+            'ticket_code' => $ticketCode !== null ? mb_substr($ticketCode, 0, 64) : null,
             'action' => $action,
             'status' => $status,
             'success' => $success,
             'attendee_name' => $name,
-        ];
-
-        if (! empty($context)) {
-            $payload['context'] = $context;
-        }
-
-        TicketActivityLog::create($payload);
+        ]);
     }
 }

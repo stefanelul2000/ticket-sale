@@ -3,6 +3,8 @@
 namespace App\Http\Controllers;
 
 use App\Models\Event;
+use App\Models\TicketType;
+use App\Support\Organization;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -12,236 +14,167 @@ class EventController extends Controller
 {
     #[OA\Get(
         path: '/events',
-        summary: 'Get a list of all events with ticket counts',
+        summary: 'List events with ticket counts',
         security: [['sanctum' => []]],
         tags: ['Events'],
         responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Successful operation',
-                content: new OA\JsonContent(
-                    type: 'array',
-                    items: new OA\Items(ref: '#/components/schemas/Event')
-                )
-            ),
+            new OA\Response(response: 200, description: 'Successful operation', content: new OA\JsonContent(type: 'array', items: new OA\Items(ref: '#/components/schemas/Event'))),
             new OA\Response(response: 401, description: 'Unauthenticated'),
-            new OA\Response(response: 403, description: 'Unauthorized (requires role:4)'),
+            new OA\Response(response: 403, description: 'Requires role:4'),
         ]
     )]
     public function index()
     {
-        return Event::withCount([
-            'ticketTypes',
-            'tickets as tickets_generated',
-            'tickets as tickets_sold' => function ($q) {
-                $q->whereNotNull('sold_at');
-            },
-        ])->orderBy('starts_at')->get();
+        return $this->withCounts(Event::query())
+            ->orderByRaw('starts_at is null')
+            ->orderByDesc('starts_at')
+            ->orderByDesc('id')
+            ->get();
     }
 
-    #[OA\Get(
-        path: '/events/summary',
-        summary: 'Get lightweight event summaries',
-        security: [['sanctum' => []]],
-        tags: ['Events'],
-        responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Successful operation',
-                content: new OA\JsonContent(
-                    type: 'array',
-                    items: new OA\Items(
-                        properties: [
-                            new OA\Property(property: 'id', type: 'integer', example: 1),
-                            new OA\Property(property: 'name', type: 'string', example: 'Launch Party'),
-                            new OA\Property(property: 'starts_at', type: 'string', format: 'date-time', nullable: true),
-                        ]
-                    )
-                )
-            ),
-            new OA\Response(response: 401, description: 'Unauthenticated'),
-            new OA\Response(response: 403, description: 'Unauthorized (requires role:2)'),
-        ]
-    )]
+    public function show(int $eventId)
+    {
+        $event = $this->withCounts(Event::query())->findOrFail($eventId);
+        $event->setRelation('ticketTypes', $event->ticketTypes()->orderBy('sort')->orderBy('id')->get());
+
+        return response()->json($event->toArray() + [
+            'public_link' => Organization::get()['public_url'].'/e/'.$event->slug,
+        ]);
+    }
+
+    /**
+     * Lightweight list for pickers (door, assigning, reports).
+     */
     public function summary()
     {
-        return Event::orderBy('starts_at')->get(['id', 'name', 'starts_at']);
+        return $this->withCounts(Event::query())
+            ->orderByRaw('starts_at is null')
+            ->orderByDesc('starts_at')
+            ->orderByDesc('id')
+            ->get(['id', 'name', 'slug', 'starts_at', 'ends_at', 'venue', 'capacity', 'is_public']);
     }
 
-    #[OA\Post(
-        path: '/events',
-        summary: 'Create a new event',
-        security: [['sanctum' => []]],
-        tags: ['Events'],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                properties: [
-                    new OA\Property(property: 'name', type: 'string', example: 'Summer Festival', minLength: 1, maxLength: 255),
-                    new OA\Property(property: 'slug', type: 'string', example: 'summer-festival', nullable: true, maxLength: 255),
-                    new OA\Property(property: 'is_online', type: 'boolean', example: false),
-                    new OA\Property(property: 'venue', type: 'string', nullable: true, example: 'Central Park', maxLength: 255),
-                    new OA\Property(property: 'city', type: 'string', nullable: true, example: 'New York', maxLength: 255),
-                    new OA\Property(property: 'country', type: 'string', nullable: true, example: 'USA', maxLength: 255),
-                    new OA\Property(property: 'starts_at', type: 'string', format: 'date-time', nullable: true, example: '2025-07-01T10:00:00Z'),
-                    new OA\Property(property: 'ends_at', type: 'string', format: 'date-time', nullable: true, example: '2025-07-03T22:00:00Z'),
-                    new OA\Property(property: 'capacity', type: 'integer', nullable: true, example: 5000, minimum: 0),
-                    new OA\Property(property: 'branding', type: 'object', nullable: true, description: 'JSON object for branding details'),
-                    new OA\Property(property: 'seo', type: 'object', nullable: true, description: 'JSON object for SEO details'),
-                ],
-                required: ['name']
-            )
-        ),
-        responses: [
-            new OA\Response(
-                response: 201,
-                description: 'Event created successfully',
-                content: new OA\JsonContent(ref: '#/components/schemas/Event')
-            ),
-            new OA\Response(response: 401, description: 'Unauthenticated'),
-            new OA\Response(response: 403, description: 'Unauthorized (requires role:4)'),
-            new OA\Response(response: 422, description: 'Validation error'),
-        ]
-    )]
     public function store(Request $request)
     {
         $data = $this->validated($request);
         $data['slug'] = $this->uniqueSlug($data['slug'] ?? $data['name']);
         $event = Event::create($data);
-        return response()->json(
-            $event->loadCount([
-                'ticketTypes',
-                'tickets as tickets_generated',
-                'tickets as tickets_sold' => function ($q) {
-                    $q->whereNotNull('sold_at');
-                },
-            ]),
-            201
-        );
+
+        // Every event needs at least one ticket type; start with a sensible default.
+        TicketType::create([
+            'event_id' => $event->id,
+            'name' => $request->input('default_ticket_type', __('Invitation')),
+            'kind' => 'free',
+            'price' => 0,
+        ]);
+
+        $this->logAdminAction($request->user()?->id, 'event.create', ['event_id' => $event->id, 'name' => $event->name]);
+
+        return response()->json($this->withCounts(Event::query())->find($event->id), 201);
     }
 
-    #[OA\Patch(
-        path: '/events/{eventId}',
-        summary: 'Update an existing event',
-        security: [['sanctum' => []]],
-        tags: ['Events'],
-        parameters: [
-            new OA\Parameter(
-                name: 'eventId',
-                in: 'path',
-                description: 'ID of the event to update',
-                required: true,
-                schema: new OA\Schema(type: 'integer', format: 'int64', example: 1)
-            ),
-        ],
-        requestBody: new OA\RequestBody(
-            required: true,
-            content: new OA\JsonContent(
-                properties: [
-                    new OA\Property(property: 'name', type: 'string', example: 'Updated Festival Name', minLength: 1, maxLength: 255),
-                    new OA\Property(property: 'slug', type: 'string', example: 'updated-festival-name', nullable: true, maxLength: 255),
-                    new OA\Property(property: 'is_online', type: 'boolean', example: false),
-                    new OA\Property(property: 'venue', type: 'string', nullable: true, example: 'New Central Park', maxLength: 255),
-                    new OA\Property(property: 'city', type: 'string', nullable: true, example: 'New York', maxLength: 255),
-                    new OA\Property(property: 'country', type: 'string', nullable: true, example: 'USA', maxLength: 255),
-                    new OA\Property(property: 'starts_at', type: 'string', format: 'date-time', nullable: true, example: '2025-07-01T10:00:00Z'),
-                    new OA\Property(property: 'ends_at', type: 'string', format: 'date-time', nullable: true, example: '2025-07-03T22:00:00Z'),
-                    new OA\Property(property: 'capacity', type: 'integer', nullable: true, example: 6000, minimum: 0),
-                    new OA\Property(property: 'branding', type: 'object', nullable: true, description: 'JSON object for branding details'),
-                    new OA\Property(property: 'seo', type: 'object', nullable: true, description: 'JSON object for SEO details'),
-                ]
-            )
-        ),
-        responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Event updated successfully',
-                content: new OA\JsonContent(ref: '#/components/schemas/Event')
-            ),
-            new OA\Response(response: 401, description: 'Unauthenticated'),
-            new OA\Response(response: 403, description: 'Unauthorized (requires role:4)'),
-            new OA\Response(response: 404, description: 'Event not found'),
-            new OA\Response(response: 422, description: 'Validation error'),
-        ]
-    )]
     public function update(Request $request, int $eventId)
     {
         $event = Event::findOrFail($eventId);
-        $data = $this->validated($request, $eventId);
+        $data = $this->validated($request, $eventId, partial: true);
 
-        // Enforce capacity not below generated/sold counts
         if (array_key_exists('capacity', $data) && $data['capacity'] !== null) {
-            $counts = $event->tickets()
-                ->selectRaw('count(*) as generated_count, sum(case when sold_at is not null then 1 else 0 end) as sold_count')
-                ->first();
-            $generated = (int) ($counts->generated_count ?? 0);
-            $sold = (int) ($counts->sold_count ?? 0);
-            if ($data['capacity'] < $generated || $data['capacity'] < $sold) {
+            $generated = $event->tickets()->withTrashed()->count();
+            $assigned = $event->tickets()->whereNotNull('sold_at')->count();
+            if ($data['capacity'] < $assigned) {
                 return response()->json([
-                    'message' => 'Capacity cannot be less than tickets already generated or sold.',
+                    'message' => __('Capacity cannot be lower than the :n tickets already assigned.', ['n' => $assigned]),
                     'generated' => $generated,
-                    'sold' => $sold,
+                    'sold' => $assigned,
                 ], 422);
             }
         }
 
-        if (! isset($data['slug']) && isset($data['name'])) {
-            $data['slug'] = $this->uniqueSlug($data['name'], $eventId);
+        if (! empty($data['slug'])) {
+            $data['slug'] = $this->uniqueSlug($data['slug'], $eventId);
+        } else {
+            unset($data['slug']);
         }
+
         $event->update($data);
-        return $event->fresh()->loadCount([
-            'ticketTypes',
-            'tickets as tickets_generated',
-            'tickets as tickets_sold' => function ($q) {
-                $q->whereNotNull('sold_at');
-            },
-        ]);
+        $this->logAdminAction($request->user()?->id, 'event.update', ['event_id' => $eventId, 'fields' => array_keys($data)]);
+
+        return $this->withCounts(Event::query())->find($eventId);
     }
 
-    #[OA\Delete(
-        path: '/events/{eventId}',
-        summary: 'Delete an event',
-        security: [['sanctum' => []]],
-        tags: ['Events'],
-        parameters: [
-            new OA\Parameter(
-                name: 'eventId',
-                in: 'path',
-                description: 'ID of the event to delete',
-                required: true,
-                schema: new OA\Schema(type: 'integer', format: 'int64', example: 1)
-            ),
-        ],
-        responses: [
-            new OA\Response(
-                response: 200,
-                description: 'Event deleted successfully',
-                content: new OA\JsonContent(
-                    properties: [
-                        new OA\Property(property: 'deleted', type: 'boolean', example: true),
-                    ]
-                )
-            ),
-            new OA\Response(response: 401, description: 'Unauthenticated'),
-            new OA\Response(response: 403, description: 'Unauthorized (requires role:4)'),
-            new OA\Response(response: 404, description: 'Event not found'),
-        ]
-    )]
-    public function destroy(int $eventId)
+    /**
+     * Copy an event (settings + ticket types, no tickets) — e.g. for next year's edition.
+     */
+    public function duplicate(Request $request, int $eventId)
+    {
+        $source = Event::with('ticketTypes')->findOrFail($eventId);
+
+        $copy = DB::transaction(function () use ($source) {
+            $copy = $source->replicate(['slug', 'starts_at', 'ends_at', 'is_public']);
+            $copy->name = mb_substr($source->name.' ('.__('copy').')', 0, 255);
+            $copy->slug = $this->uniqueSlug($copy->name);
+            $copy->is_public = false;
+            $copy->save();
+
+            foreach ($source->ticketTypes as $type) {
+                $newType = $type->replicate(['event_id']);
+                $newType->event_id = $copy->id;
+                $newType->save();
+            }
+
+            return $copy;
+        });
+
+        $this->logAdminAction($request->user()?->id, 'event.duplicate', ['from' => $source->id, 'event_id' => $copy->id]);
+
+        return response()->json($this->withCounts(Event::query())->find($copy->id), 201);
+    }
+
+    public function destroy(Request $request, int $eventId)
     {
         $event = Event::findOrFail($eventId);
+
+        $sold = $event->tickets()->whereNotNull('sold_at')->count();
+        if ($sold > 0) {
+            return response()->json([
+                'message' => __('This event has :n assigned ticket(s) and cannot be deleted.', ['n' => $sold]),
+            ], 409);
+        }
+
+        $templateImage = $event->print_template['image_path'] ?? null;
+
         DB::transaction(function () use ($event) {
-            // Hard delete everything related to this event.
             $event->tickets()->withTrashed()->forceDelete();
             $event->ticketTypes()->withTrashed()->forceDelete();
             $event->forceDelete();
         });
+        if ($templateImage && str_starts_with($templateImage, 'templates/')) {
+            $stillUsed = Event::withTrashed()->whereNotNull('print_template')->get(['id', 'print_template'])
+                ->contains(fn (Event $e) => ($e->print_template['image_path'] ?? null) === $templateImage);
+            if (! $stillUsed) {
+                \Illuminate\Support\Facades\Storage::disk('public')->delete($templateImage);
+            }
+        }
+        $this->logAdminAction($request->user()?->id, 'event.delete', ['event_id' => $eventId, 'name' => $event->name]);
+
         return response()->json(['deleted' => true]);
+    }
+
+    private function withCounts($query)
+    {
+        return $query->withCount([
+            'ticketTypes',
+            'tickets as tickets_generated',
+            'tickets as tickets_sold' => fn ($q) => $q->whereNotNull('sold_at'),
+            'tickets as tickets_checked_in' => fn ($q) => $q->where('checkin', true),
+            'tickets as tickets_walk_in' => fn ($q) => $q->where('is_walk_in', true),
+        ]);
     }
 
     private function uniqueSlug(string $base, ?int $ignoreId = null): string
     {
-        $slugBase = Str::slug($base) ?: Str::random(6);
+        $slugBase = Str::slug($base) ?: Str::lower(Str::random(6));
+        $slugBase = mb_substr($slugBase, 0, 180);
         $slug = $slugBase;
         $i = 1;
         while (
@@ -250,26 +183,31 @@ class EventController extends Controller
                 ->when($ignoreId, fn ($q) => $q->where('id', '!=', $ignoreId))
                 ->exists()
         ) {
-            $slug = $slugBase . '-' . $i;
+            $slug = $slugBase.'-'.$i;
             $i++;
         }
+
         return $slug;
     }
 
-    private function validated(Request $request, ?int $id = null): array
+    private function validated(Request $request, ?int $id = null, bool $partial = false): array
     {
+        $req = $partial ? 'sometimes' : 'required';
+
         return $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'slug' => ['nullable', 'string', 'max:255', 'unique:events,slug,' . ($id ?? 'NULL') . ',id'],
+            'name' => [$req, 'string', 'max:255'],
+            'description' => ['nullable', 'string', 'max:5000'],
+            'slug' => ['nullable', 'string', 'max:180', 'regex:/^[a-z0-9]+(?:-[a-z0-9]+)*$/'],
             'is_online' => ['boolean'],
+            'is_public' => ['boolean'],
             'venue' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:255'],
             'country' => ['nullable', 'string', 'max:255'],
             'starts_at' => ['nullable', 'date'],
             'ends_at' => ['nullable', 'date', 'after_or_equal:starts_at'],
-            'capacity' => ['nullable', 'integer', 'min:0'],
-            'branding' => ['nullable', 'array'],
-            'seo' => ['nullable', 'array'],
+            'capacity' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'donation_url' => Organization::URL_RULE,
+            'photos_url' => Organization::URL_RULE,
         ]);
     }
 }

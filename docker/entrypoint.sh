@@ -1,159 +1,99 @@
 #!/bin/sh
-set -e
+# Laravel bootstrap (s6 oneshot, runs as root before php-fpm/nginx start).
+# Container environment is the source of truth; /config/app.env keeps APP_KEY and
+# values written by the setup wizard.
+set -eu
 
 cd /var/www/html
 
 STORED_ENV="${ENV_STORE_PATH:-/config/app.env}"
 PROVISION_MARK="${PROVISION_MARK:-/config/.provisioned}"
-mkdir -p "$(dirname "$STORED_ENV")" /var/www/html/storage
 
-# Prepare a single shared .env (symlink to $STORED_ENV)
-# Populate from example if the file is missing or empty.
+as_www() {
+  /command/s6-setuidgid www-data "$@"
+}
+
+artisan() {
+  as_www php artisan "$@"
+}
+
+log() {
+  echo "[bootstrap] $*"
+}
+
+# ---------- .env (persisted in /config) ----------
+mkdir -p "$(dirname "$STORED_ENV")"
 if [ ! -s "$STORED_ENV" ]; then
+  log "creating $STORED_ENV from .env.example"
   cp .env.example "$STORED_ENV"
 fi
-rm -f .env
-ln -s "$STORED_ENV" .env
+ln -sfn "$STORED_ENV" .env
+chown www-data:www-data "$STORED_ENV" "$(dirname "$STORED_ENV")"
+chmod 640 "$STORED_ENV"
 
-# Helper to update .env key with provided value (if present in environment)
-update_env_value() {
-  key="$1"
-  value="$2"
-  [ -z "$value" ] && return 0
-  quoted=$(quote_env_value "$value")
-  if grep -q "^${key}=" .env; then
-    sed -i "s|^${key}=.*|${key}=${quoted}|" .env
-  else
-    echo "${key}=${quoted}" >>.env
-  fi
-}
-
-quote_env_value() {
-  value="$1"
-  escaped="${value//\\/\\\\}"
-  escaped="${escaped//\"/\\\"}"
-  printf '%s' "\"$escaped\""
-}
-
-# Sync runtime env overrides into the persisted .env so Laravel picks them up
-update_env_value "DB_HOST" "$DB_HOST"
-update_env_value "DB_DATABASE" "$DB_DATABASE"
-update_env_value "DB_USERNAME" "$DB_USERNAME"
-update_env_value "DB_PASSWORD" "$DB_PASSWORD"
-update_env_value "SETUP_ENABLED" "$SETUP_ENABLED"
-update_env_value "REDIS_HOST" "$REDIS_HOST"
-update_env_value "REDIS_PORT" "$REDIS_PORT"
-update_env_value "CACHE_DRIVER" "$CACHE_DRIVER"
-update_env_value "SESSION_DRIVER" "$SESSION_DRIVER"
-update_env_value "QUEUE_CONNECTION" "$QUEUE_CONNECTION"
-
-if ! grep -q "^APP_KEY=" .env || [ "$(grep '^APP_KEY=' .env | cut -d= -f2)" = "" ]; then
-  php artisan key:generate --force
+if [ -z "${APP_KEY:-}" ] && ! grep -Eq '^APP_KEY=.+' "$STORED_ENV"; then
+  log "generating APP_KEY"
+  artisan key:generate --force
 fi
 
-# Ensure public storage link exists (for logo uploads)
-php artisan storage:link >/dev/null 2>&1 || true
+# ---------- writable dirs ----------
+mkdir -p storage/app/public storage/app/private storage/framework/sessions storage/framework/cache/data \
+         storage/framework/views storage/logs storage/api-docs bootstrap/cache
+chown -R www-data:www-data storage bootstrap/cache
+chmod -R ug+rwX storage bootstrap/cache
 
-# Persist env to storage volume and make it writable by www-data
-chown www-data:www-data .env "$STORED_ENV"
-chmod 660 .env "$STORED_ENV"
 
-# Ensure framework subdirectories exist for file-based sessions/cache/views
-mkdir -p storage/framework/sessions storage/framework/cache/data storage/framework/views
+# ---------- frontend runtime config ----------
+# Empty API_URL => the SPA uses its own origin + /api (works behind any proxy/host).
+API_URL="${VITE_API_URL:-}"
+API_URL=$(printf '%s' "$API_URL" | tr -d '"\\<>')
+printf 'window.__APP_CONFIG__ = { API_URL: "%s" };\n' "$API_URL" > public/config.js
+chmod 644 public/config.js
+log "config.js API_URL='${API_URL}'"
 
-# Ensure writable storage/cache/public dirs
-chown -R www-data:www-data storage bootstrap/cache public
-chmod -R 775 storage bootstrap/cache public
+# ---------- caches ----------
+artisan config:clear >/dev/null 2>&1 || true
+artisan route:clear >/dev/null 2>&1 || true
+artisan view:clear >/dev/null 2>&1 || true
 
-# Ensure host-mounted files are editable for host users and still writable by the webserver
-umask 0002
-
-ensure_writable_dir() {
-  dir="$1"
-  [ -d "$dir" ] || return 0
-  # Try to chown everything to www-data; if it succeeds, we're done
-  if chown -R www-data:www-data "$dir" >/dev/null 2>&1; then
-    chmod -R 775 "$dir" >/dev/null 2>&1 || true
-    return 0
-  fi
-
-  # If chown didn't work (e.g. host mount where chown is not permitted), try ACLs if available
-  if command -v setfacl >/dev/null 2>&1; then
-    echo "Applying ACL for www-data on $dir"
-    setfacl -R -m u:www-data:rwX -m g:www-data:rwX "$dir" || true
-    setfacl -R -d -m u:www-data:rwX -m g:www-data:rwX "$dir" || true
-    return 0
-  fi
-
-  # Last resort: make files and directories readable/writable by group and public (for dev only)
-  echo "Applying permissive permissions on $dir"
-  find "$dir" -type d -exec chmod 2775 {} \; 2>/dev/null || true
-  find "$dir" -type f -exec chmod 0664 {} \; 2>/dev/null || true
-}
-
-ensure_writable_dir storage
-ensure_writable_dir bootstrap/cache
-ensure_writable_dir public
-ensure_writable_dir /var/www/html
-
-# ----------------------------------------
-# Generate Swagger JSON on startup (if missing or if explicitly enabled)
-# ----------------------------------------
-# Use GENERATE_L5_SWAGGER_ON_STARTUP=true to always run, or false to only generate if missing
-GENERATE_L5_SWAGGER_ON_STARTUP="${GENERATE_L5_SWAGGER_ON_STARTUP:-false}"
-if [ "${GENERATE_L5_SWAGGER_ON_STARTUP}" = "true" ] || [ ! -f /var/www/html/storage/api-docs/api-docs.json ]; then
-  echo "Generating L5 Swagger JSON (startup)..."
-  # Attempt to generate swagger JSON; ignore failures to avoid blocking startup
-  php artisan l5-swagger:generate || true
-  # Fix ownership if host bind mounted created root-owned files
-  chown -R www-data:www-data /var/www/html/storage/api-docs || true
+if [ "${GENERATE_L5_SWAGGER_ON_STARTUP:-false}" = "true" ] || [ ! -f storage/api-docs/api-docs.json ]; then
+  artisan l5-swagger:generate >/dev/null 2>&1 || log "swagger generation failed (ignored)"
 fi
 
-# Clear cached config/routes so new env values (e.g., APP_URL, REDIS_HOST) take effect
-php artisan config:clear >/dev/null 2>&1 || true
-php artisan cache:clear >/dev/null 2>&1 || true
-php artisan route:clear >/dev/null 2>&1 || true
-
-# Run migrations/seed only once (unless you remove the provision mark).
-if [ "${AUTO_MIGRATE:-true}" = "true" ]; then
-  if [ ! -f "$PROVISION_MARK" ]; then
-    if [ -n "$DB_HOST" ] && [ -n "$DB_DATABASE" ]; then
-      if php -r "try { new PDO('mysql:host='.getenv('DB_HOST').';dbname='.getenv('DB_DATABASE'), getenv('DB_USERNAME'), getenv('DB_PASSWORD')); } catch (Throwable \$e) { exit(1);}"; then
-        php artisan migrate --force || true
-        php artisan db:seed --force || true
-        touch "$PROVISION_MARK"
-      else
-        echo "DB not reachable yet; skipping migrate/seed. Setup will run when DB is ready."
-      fi
-    else
-      echo "DB settings missing; skipping migrate/seed until setup completes."
-    fi
-  else
-    echo "Provisioning already completed; skipping migrate/seed."
-  fi
-else
-  echo "AUTO_MIGRATE disabled; skipping automatic migrate/seed."
-fi
-
-# ----------------------------------------
-# Inject runtime API URL into frontend config.js
-# ----------------------------------------
-API_URL="${VITE_API_URL:-http://localhost/api}"
-
-if [ -f /var/www/html/public/config.js ]; then
-  echo "Injecting runtime API_URL=${API_URL} into config.js..."
-  sed -i "s|__API_URL__|${API_URL}|g" /var/www/html/public/config.js
-else
-  echo "Warning: public/config.js not found!"
-fi
-
-echo "Final runtime config.js contents:"
-cat /var/www/html/public/config.js || echo "config.js not readable"
-
-if [ "${INIT_ONLY:-false}" = "true" ]; then
+# ---------- database ----------
+if [ "${AUTO_MIGRATE:-true}" != "true" ]; then
+  log "AUTO_MIGRATE disabled; skipping migrations"
   exit 0
 fi
 
-# Start services
-php-fpm -D
-exec nginx -g "daemon off;"
+if [ -z "${DB_HOST:-}" ]; then
+  log "DB_HOST not set; migrations will run from the setup wizard"
+  exit 0
+fi
+
+log "waiting for database ${DB_HOST}:${DB_PORT:-3306}"
+tries=0
+until as_www php -r '
+  try {
+    new PDO("mysql:host=".getenv("DB_HOST").";port=".(getenv("DB_PORT") ?: 3306).";dbname=".getenv("DB_DATABASE"),
+            getenv("DB_USERNAME"), getenv("DB_PASSWORD"), [PDO::ATTR_TIMEOUT => 3]);
+  } catch (Throwable $e) { exit(1); }' 2>/dev/null; do
+  tries=$((tries + 1))
+  if [ "$tries" -ge 60 ]; then
+    log "database not reachable after 120s; continuing without migrations"
+    exit 0
+  fi
+  sleep 2
+done
+
+# Migrations are idempotent: run on every start so image updates apply schema changes.
+artisan migrate --force --no-interaction
+
+if [ ! -f "$PROVISION_MARK" ]; then
+  log "first start: seeding roles and permissions"
+  artisan db:seed --force --no-interaction
+  touch "$PROVISION_MARK"
+  chown www-data:www-data "$PROVISION_MARK"
+fi
+
+log "bootstrap complete"

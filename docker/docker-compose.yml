@@ -1,68 +1,102 @@
+# Production stack. Configure via an env file, e.g.:
+#   Bundled MySQL:  docker compose -p ticket-sale -f docker/docker-compose.yml --profile bundled-db --env-file ENV up -d
+#   External DB:    docker compose -p ticket-sale -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml --env-file ENV up -d
+# Required in the env file: DB_PASSWORD, DATA_DIR, APP_URL (+ DB_ROOT_PASSWORD for the bundled DB,
+# DB_HOST / DB_NETWORK for an external DB).
+name: ticket-sale
+
 services:
   app:
     container_name: ticket-sale-app
-    image: ghcr.io/stefanelul2000/ticket-sale:dev-latest
+    image: ${APP_IMAGE:-ghcr.io/stefanelul2000/ticket-sale:dev-latest}
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+      target: app
+    restart: unless-stopped
     ports:
-      - "8080:80"
+      - "${APP_BIND:-8080}:80"
     environment:
-      PUID: 1000
-      PGID: 1000
-      TZ: UTC
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
+      TZ: ${TZ:-Europe/Bucharest}
       APP_ENV: production
       APP_DEBUG: "false"
-      CACHE_DRIVER: redis
-      SESSION_DRIVER: redis
-      QUEUE_CONNECTION: sync
+      APP_URL: ${APP_URL:-http://localhost:8080}
+      FRONTEND_URL: ${APP_URL:-http://localhost:8080}
+      APP_TIMEZONE: ${TZ:-Europe/Bucharest}
+      LOG_CHANNEL: stack
+      LOG_STACK: daily
+      LOG_LEVEL: warning
+      # DB comes from here, so the setup wizard skips the database step.
+      SETUP_ENABLED: "false"
+      DB_CONNECTION: mysql
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE:-ticket_sale}
+      DB_USERNAME: ${DB_USERNAME:-ticket_user}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      # Set to your public frontend/API URL
-      VITE_API_URL: http://10.0.10.14:8080/api
-      FRONTEND_URL: http://10.0.10.14:8080
+      CACHE_STORE: redis
+      CACHE_DRIVER: redis
+      SESSION_DRIVER: redis
+      SESSION_LIFETIME: ${SESSION_LIFETIME:-720}
+      SESSION_SECURE_COOKIE: ${SESSION_SECURE_COOKIE:-true}
+      SESSION_SAME_SITE: lax
+      QUEUE_CONNECTION: sync
+      SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost,localhost:8080,127.0.0.1:8080}
+      TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1}
+      # Leave empty: the SPA calls /api on its own origin.
+      VITE_API_URL: ""
     depends_on:
-      - db
-      - redis
-    working_dir: /var/www/html
+      db:
+        condition: service_healthy
+        required: false
+      redis:
+        condition: service_healthy
     volumes:
-      - /host/path/ticket-sale/storage:/var/www/html/storage
-      - /host/path/ticket-sale/config:/config
-      - /host/path/ticket-sale/logs:/var/log
-    healthcheck:
-      test: ["CMD-SHELL", "curl -fs http://localhost/health || exit 1"]
-      interval: 30s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
+      - ${DATA_DIR:?set DATA_DIR}/storage:/var/www/html/storage
+      - ${DATA_DIR}/config:/config
+      - ${DATA_DIR}/logs:/var/log
+    networks: [ticket]
 
   db:
     container_name: ticket-sale-db
     image: mysql:8.0
+    profiles: [bundled-db]
+    restart: unless-stopped
+    command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
     environment:
+      TZ: ${TZ:-Europe/Bucharest}
       MYSQL_DATABASE: ticket_sale
       MYSQL_USER: ticket_user
-      MYSQL_PASSWORD: ticket_pass
-      MYSQL_ROOT_PASSWORD: rootpass
-    ports:
-      - "3306:3306"
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-}
     volumes:
-      - db-data:/var/lib/mysql
+      - ${DATA_DIR}/mysql:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -u root -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
       start_period: 30s
+    networks: [ticket]
 
   redis:
     container_name: ticket-sale-redis
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - ${DATA_DIR}/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
+      interval: 10s
       timeout: 5s
-      retries: 5
-      start_period: 5s
+      retries: 6
+    networks: [ticket]
 
-volumes:
-  db-data:
+networks:
+  ticket:
+    name: ticket-sale
