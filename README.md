@@ -12,15 +12,17 @@ Event ticketing portal with Laravel API + React/Vite frontend, Dockerized for ea
 # 1. Build the image (runs on any x86_64 Docker host)
 docker build -f docker/Dockerfile --target app -t ticket-sale:local .
 # 2. Create an env file outside git (see docker/ticket-sale.env.example) with strong DB passwords
-# 3. Start app + MySQL + Redis (only the app port is published)
-docker compose -p ticket-sale -f docker/docker-compose.yml --env-file /path/to/ticket-sale.env up -d
+# 3a. Start app + bundled MySQL + Redis (only the app port is published)
+docker compose -p ticket-sale -f docker/docker-compose.yml --profile bundled-db --env-file /path/to/ticket-sale.env up -d
+# 3b. ...or use an existing MySQL/MariaDB server (set DB_HOST, DB_NETWORK, DB_PASSWORD in the env file)
+docker compose -p ticket-sale -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml --env-file /path/to/ticket-sale.env up -d
 # 4. Create the first owner account before exposing the site
 docker exec ticket-sale-app s6-setuidgid www-data php artisan user:create-owner <username> <email> "<Name>"
 ```
 - Put it behind an HTTPS reverse proxy that sets `X-Forwarded-Proto/Host` (private-network proxies are trusted by default, see `TRUSTED_PROXIES`). Set `APP_URL` and `SANCTUM_STATEFUL_DOMAINS` to the public host.
 - Migrations run on every container start; roles/permissions are seeded on first start.
 - Health: `GET /api/health` (checks the database; used by the container healthcheck).
-- Backups: `scripts/backup-db.sh` (cron it hourly; restore command inside the script).
+- Backups: `scripts/backup-db.sh` (reads `DB_CONTAINER`/`DB_DATABASE` from `data/ticket-sale.env`; cron it hourly; restore command inside the script).
 - Emergency: `php artisan user:reset-password <username>` (also re-activates the account).
 
 ## Ticket workflow

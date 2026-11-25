@@ -54,6 +54,9 @@ type ScanOutcome = {
 
 const MAX_HISTORY_ITEMS = 50;
 const AUTO_KEY = 'ts_auto_checkin';
+const EVENT_KEY = 'ts_dashboard_event';
+
+type EventSummary = { id: number; name: string; starts_at?: string | null };
 
 function feedback(tone: ScanOutcome['tone']) {
   try {
@@ -91,6 +94,8 @@ export function DashboardPage() {
   const canSeeHistory = roleId >= 2;
   const canClearHistory = roleId >= 5;
   const [stats, setStats] = useState<Stats | null>(null);
+  const [events, setEvents] = useState<EventSummary[]>([]);
+  const [eventId, setEventId] = useState<number | null>(() => Number(localStorage.getItem(EVENT_KEY)) || null);
   const [loadingStats, setLoadingStats] = useState(false);
   const [sellTicket, setSellTicket] = useState({ ticket: '', name: '' });
   const [selling, setSelling] = useState(false);
@@ -117,20 +122,38 @@ export function DashboardPage() {
     localStorage.setItem(AUTO_KEY, autoCheckin ? '1' : '0');
   }, [autoCheckin]);
 
-  const updateStats = useCallback(async () => {
+  useEffect(() => {
     if (!user || roleId < 2) return;
-    try {
-      setStats(await api.stats());
-    } catch {
-      /* ignore */
-    }
+    api
+      .eventSummaries()
+      .then((list: EventSummary[]) => {
+        setEvents(list);
+        // Default to the most recently created event (highest id) unless a valid choice is stored.
+        setEventId((current) =>
+          current && list.some((e) => e.id === current) ? current : list.length ? Math.max(...list.map((e) => e.id)) : null,
+        );
+      })
+      .catch(() => {});
   }, [user, roleId]);
 
   useEffect(() => {
-    if (!user || roleId < 2) return;
+    if (eventId) localStorage.setItem(EVENT_KEY, String(eventId));
+  }, [eventId]);
+
+  const updateStats = useCallback(async () => {
+    if (!user || roleId < 2 || !eventId) return;
+    try {
+      setStats(await api.stats(eventId));
+    } catch {
+      /* ignore */
+    }
+  }, [user, roleId, eventId]);
+
+  useEffect(() => {
+    if (!user || roleId < 2 || !eventId) return;
     setLoadingStats(true);
     updateStats().finally(() => setLoadingStats(false));
-  }, [user, roleId, updateStats]);
+  }, [user, roleId, eventId, updateStats]);
 
   const loadHistory = useCallback(
     async (withSpinner = false) => {
@@ -314,6 +337,28 @@ export function DashboardPage() {
           <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm text-blue-200 shadow">{toast}</div>
         )}
       </div>
+
+      {roleId >= 2 && events.length > 1 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="text-sm text-slate-400" htmlFor="dashboard-event">
+            Counters for event
+          </label>
+          <select
+            id="dashboard-event"
+            className="rounded-xl border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-white"
+            value={eventId ?? ''}
+            onChange={(e) => setEventId(Number(e.target.value))}
+          >
+            {[...events]
+              .sort((a, b) => b.id - a.id)
+              .map((ev) => (
+                <option key={ev.id} value={ev.id}>
+                  {ev.name}
+                </option>
+              ))}
+          </select>
+        </div>
+      )}
 
       {roleId >= 2 && (
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">

@@ -1,0 +1,10 @@
+# Use an existing MySQL/MariaDB server instead of the bundled one.
+# The app joins the DB server's docker network (DB_NETWORK) and connects to DB_HOST.
+services:
+  app:
+    networks: [ticket, dbnet]
+
+networks:
+  dbnet:
+    name: ${DB_NETWORK:?set DB_NETWORK}
+    external: true

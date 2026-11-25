@@ -1,6 +1,8 @@
 # Production stack. Configure via an env file, e.g.:
-#   docker compose -p ticket-sale -f docker/docker-compose.yml --env-file /path/to/ticket-sale.env up -d
-# Required in the env file: DB_PASSWORD, DB_ROOT_PASSWORD, DATA_DIR, APP_URL.
+#   Bundled MySQL:  docker compose -p ticket-sale -f docker/docker-compose.yml --profile bundled-db --env-file ENV up -d
+#   External DB:    docker compose -p ticket-sale -f docker/docker-compose.yml -f docker/docker-compose.external-db.yml --env-file ENV up -d
+# Required in the env file: DB_PASSWORD, DATA_DIR, APP_URL (+ DB_ROOT_PASSWORD for the bundled DB,
+# DB_HOST / DB_NETWORK for an external DB).
 name: ticket-sale
 
 services:
@@ -29,10 +31,10 @@ services:
       # DB comes from here, so the setup wizard skips the database step.
       SETUP_ENABLED: "false"
       DB_CONNECTION: mysql
-      DB_HOST: db
-      DB_PORT: 3306
-      DB_DATABASE: ticket_sale
-      DB_USERNAME: ticket_user
+      DB_HOST: ${DB_HOST:-db}
+      DB_PORT: ${DB_PORT:-3306}
+      DB_DATABASE: ${DB_DATABASE:-ticket_sale}
+      DB_USERNAME: ${DB_USERNAME:-ticket_user}
       DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD}
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -50,6 +52,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
+        required: false
       redis:
         condition: service_healthy
     volumes:
@@ -61,6 +64,7 @@ services:
   db:
     container_name: ticket-sale-db
     image: mysql:8.0
+    profiles: [bundled-db]
     restart: unless-stopped
     command: ["--character-set-server=utf8mb4", "--collation-server=utf8mb4_unicode_ci"]
     environment:
@@ -68,7 +72,7 @@ services:
       MYSQL_DATABASE: ticket_sale
       MYSQL_USER: ticket_user
       MYSQL_PASSWORD: ${DB_PASSWORD}
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?set DB_ROOT_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-}
     volumes:
       - ${DATA_DIR}/mysql:/var/lib/mysql
     healthcheck:
