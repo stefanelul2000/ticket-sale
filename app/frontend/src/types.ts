@@ -82,6 +82,7 @@ export type TicketInfo = {
   checked_in_at?: string | null;
   checked_in_by?: string | null;
   is_walk_in?: boolean;
+  is_eticket?: boolean;
   event?: { id: number; name: string } | null;
   ticket_type?: { id: number; name: string; kind?: string } | null;
 };
@@ -153,7 +154,8 @@ export type TicketRequestT = {
   event_id: number;
   email: string;
   phone?: string | null;
-  attendees: string[];
+  /** Guests with their category (older requests may hold plain names). */
+  attendees: (string | { name: string; guest_category?: string | null })[];
   quantity: number;
   message?: string | null;
   status: 'pending' | 'approved' | 'rejected' | 'cancelled';

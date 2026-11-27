@@ -17,7 +17,7 @@ import { EmptyState, Loading, PageHeader } from '../components/ui/Misc';
 import { EventPicker } from '../components/EventPicker';
 import { CategoryChips } from '../components/EventBits';
 import { CameraScanner } from '../components/CameraScanner';
-import { IconCamera, IconSearch, IconUserPlus } from '../components/Icons';
+import { IconCamera, IconSearch, IconTicket, IconUserPlus } from '../components/Icons';
 
 type Tone = 'ok' | 'warn' | 'bad';
 type Outcome = { tone: Tone; title: string; detail?: string; code: string; ticket?: TicketInfo | null; at: number; canCheckIn?: boolean };
@@ -197,6 +197,16 @@ export function DoorPage() {
             <div className={clsx('rounded-2xl border-2 p-5 sm:p-8', tones[outcome.tone])} role="status" aria-live="assertive">
               <div className="font-display text-3xl font-bold sm:text-5xl">{outcome.title}</div>
               {outcome.detail && <div className="mt-3 text-lg font-semibold text-ink">{outcome.detail}</div>}
+              {outcome.ticket?.is_eticket && outcome.tone === 'ok' && (
+                <div className="mt-4 flex items-center gap-3 rounded-xl border-2 border-sky bg-surface p-4 text-ink">
+                  <IconTicket size={28} className="shrink-0 text-accent" />
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-wider text-accent">{t('door.eticket')}</div>
+                    <div className="text-xl font-bold">{t('door.handPrinted', { n: String(outcome.ticket.ticket_number).padStart(3, '0') })}</div>
+                    {outcome.ticket.name && <div className="text-sm text-soft">{t('door.handPrintedFor', { name: outcome.ticket.name })}</div>}
+                  </div>
+                </div>
+              )}
               <div className="mt-2 font-mono text-sm opacity-80">{outcome.code}</div>
               {outcome.ticket?.checked_in_at && outcome.tone === 'warn' && (
                 <div className="mt-1 text-sm text-ink">
@@ -263,7 +273,10 @@ export function DoorPage() {
                     <span className={clsx('h-2.5 w-2.5 shrink-0 rounded-full', h.tone === 'ok' ? 'bg-ok' : h.tone === 'warn' ? 'bg-warn' : 'bg-danger')} aria-hidden />
                     <div className="min-w-0 flex-1">
                       <div className="truncate font-semibold">{h.title}</div>
-                      <div className="truncate text-xs text-soft">{h.ticket?.name || h.code}</div>
+                      <div className="truncate text-xs text-soft">
+                        {h.ticket?.name || h.code}
+                        {h.ticket?.is_eticket && h.tone === 'ok' ? ` · ${t('door.eticketShort', { n: h.ticket.ticket_number })}` : ''}
+                      </div>
                     </div>
                     <span className="tabular text-xs text-soft">{fmtTime(new Date(h.at).toISOString())}</span>
                   </li>

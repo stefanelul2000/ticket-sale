@@ -21,6 +21,21 @@ class TicketRequest extends Model
 
     protected $hidden = ['ip_hash'];
 
+    /**
+     * Guests as [{name, guest_category}] (older rows stored plain names).
+     *
+     * @return list<array{name: string, guest_category: ?string}>
+     */
+    public function guestList(): array
+    {
+        return array_values(array_map(
+            fn ($a) => is_array($a)
+                ? ['name' => (string) ($a['name'] ?? ''), 'guest_category' => $a['guest_category'] ?? null]
+                : ['name' => (string) $a, 'guest_category' => null],
+            $this->attendees ?? [],
+        ));
+    }
+
     public function event()
     {
         return $this->belongsTo(Event::class);

@@ -4,7 +4,9 @@ namespace App\Http\Controllers;
 
 use App\Models\Event;
 use App\Models\Ticket;
+use App\Mail\TicketCancelledMail;
 use App\Models\TicketActivityLog;
+use App\Models\TicketRequest;
 use App\Models\TicketType;
 use App\Support\GuestCategory;
 use App\Support\TicketCode;
@@ -13,6 +15,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 
 class TicketController extends Controller
 {
@@ -349,6 +352,7 @@ class TicketController extends Controller
      */
     public function refund(Request $request, string $ticketCode)
     {
+        $notify = (bool) ($request->validate(['notify' => ['nullable', 'boolean']])['notify'] ?? false);
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
             return response()->json(['message' => __('Ticket not found.')], 404);
@@ -378,6 +382,24 @@ class TicketController extends Controller
             return response()->json(['message' => __('Ticket changed meanwhile; reload and try again.')], 409);
         }
 
+        // E-tickets: optionally tell the holder (paper invitations have no contact data).
+        $notified = false;
+        if ($notify && $previous['request_id'] && TicketRequestController::mailConfigured()) {
+            $req = TicketRequest::find($previous['request_id']);
+            if ($req) {
+                try {
+                    Mail::to($req->email)->send(new TicketCancelledMail(
+                        $ticket->event,
+                        [['name' => $previous['name'], 'number' => $ticket->ticket_number, 'code' => $ticket->ticket_code]],
+                        $req->locale,
+                    ));
+                    $notified = true;
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            }
+        }
+
         $status = $previous['checkin'] ? 'Refunded (check-in undone)' : 'Released';
         $this->recordActivity($request, 'refund', $ticket->ticket_code, $status, true, $previous['name']);
         $this->logAdminAction($request->user()?->id, 'ticket.refund', [
@@ -388,7 +410,7 @@ class TicketController extends Controller
             'request_id' => $previous['request_id'],
         ]);
 
-        return response()->json(['refunded' => true, 'was_checked_in' => (bool) $previous['checkin']]);
+        return response()->json(['refunded' => true, 'was_checked_in' => (bool) $previous['checkin'], 'notified' => $notified]);
     }
 
     public function checkin(Request $request, string $ticketCode)
@@ -561,6 +583,7 @@ class TicketController extends Controller
             'checked_in' => (int) ($row->checked_in ?? 0),
             'walk_ins' => (int) ($row->walk_ins ?? 0),
             'etickets' => (int) ($row->etickets ?? 0),
+            'mail_configured' => TicketRequestController::mailConfigured(),
         ]);
     }
 

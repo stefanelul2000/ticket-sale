@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Mail\ETicketMail;
 use App\Mail\NewRequestMail;
 use App\Mail\RequestDeclinedMail;
+use App\Mail\TicketCancelledMail;
 use App\Models\Event;
 use App\Models\Ticket;
 use App\Models\TicketRequest;
@@ -33,12 +34,22 @@ class TicketRequestTest extends TestCase
         $this->flushSession();
     }
 
+    /** Names -> [{name, guest_category}] as the public form sends them. */
+    private function guests(array $names, string $cat = 'parent'): array
+    {
+        return array_map(fn ($n) => ['name' => $n, 'guest_category' => $cat], $names);
+    }
+
     private function ask(array $over = [])
     {
-        return $this->postJson("/api/public/events/{$this->event->slug}/requests", array_merge([
+        if (isset($over['attendees']) && is_string($over['attendees'][0] ?? null)) {
+            $over['attendees'] = $this->guests($over['attendees']);
+        }
+
+        return $this->withHeader('X-Locale', 'ro')->postJson("/api/public/events/{$this->event->slug}/requests", array_merge([
             'email' => 'Parinte@Example.com',
             'phone' => '+40 770 000 000',
-            'attendees' => ['Maria Popescu', 'Ion Popescu'],
+            'attendees' => [['name' => 'Maria Popescu', 'guest_category' => 'parent'], ['name' => 'Ion Popescu', 'guest_category' => 'family']],
             'message' => 'Venim cu bunica',
             'consent' => true,
             'locale' => 'ro',
@@ -56,16 +67,20 @@ class TicketRequestTest extends TestCase
         $req = TicketRequest::first();
         $this->assertSame('pending', $req->status);
         $this->assertSame('parinte@example.com', $req->email);
-        $this->assertSame(['Maria Popescu', 'Ion Popescu'], $req->attendees);
+        $this->assertSame([['name' => 'Maria Popescu', 'guest_category' => 'parent'], ['name' => 'Ion Popescu', 'guest_category' => 'family']], $req->attendees);
         $this->assertSame(2, $req->quantity);
         Mail::assertSent(NewRequestMail::class, fn ($m) => $m->hasTo('office@example.org'));
     }
 
     public function test_request_rules(): void
     {
-        $this->ask(['attendees' => ['A', 'B', 'C', 'D', 'E']])->assertStatus(422);
+        $this->ask(['attendees' => $this->guests(['A', 'B', 'C', 'D', 'E'])])->assertStatus(422);
         $this->ask(['attendees' => ["Evil\r\nBcc: x@y.z"]])->assertStatus(422);
-        $this->ask(['consent' => false])->assertStatus(422);
+        $this->ask(['attendees' => [['name' => 'Fără categorie']]])->assertStatus(422)->assertJsonValidationErrors(['attendees.0.guest_category']);
+        $this->ask(['attendees' => [['name' => 'Ana', 'guest_category' => 'vip']]])->assertStatus(422);
+        $this->ask(['consent' => false])->assertStatus(422)->assertJsonPath('errors.consent.0', 'Bifează acordul ca să poți trimite cererea.');
+        $this->postJson("/api/public/events/{$this->event->slug}/requests", ['email' => 'x@example.com', 'attendees' => ['A']])
+            ->assertStatus(422)->assertJsonValidationErrors(['consent']);
         $this->ask(['email' => 'not-an-email'])->assertStatus(422);
 
         // honeypot: looks fine to the bot, stores nothing
@@ -74,7 +89,10 @@ class TicketRequestTest extends TestCase
 
         $this->ask()->assertCreated();
         $this->ask()->assertStatus(409)->assertJson(['result' => 'duplicate']);
+    }
 
+    public function test_requests_404_when_disabled(): void
+    {
         $this->event->update(['requests_enabled' => false]);
         $this->ask(['email' => 'other@example.com'])->assertNotFound();
     }
@@ -82,8 +100,8 @@ class TicketRequestTest extends TestCase
     public function test_requests_close_when_pool_is_reserved(): void
     {
         $this->event->update(['eticket_from' => 149, 'eticket_to' => 150]);
-        $this->ask(['attendees' => ['A', 'B', 'C']])->assertStatus(409)->assertJson(['result' => 'full', 'available' => 2]);
-        $this->ask(['attendees' => ['A', 'B']])->assertCreated();
+        $this->ask(['attendees' => $this->guests(['A', 'B', 'C'])])->assertStatus(409)->assertJson(['result' => 'full', 'available' => 2]);
+        $this->ask(['attendees' => $this->guests(['A', 'B'])])->assertCreated();
         $this->getJson("/api/public/events/{$this->event->slug}")->assertJson(['requests_open' => false]);
     }
 
@@ -96,19 +114,20 @@ class TicketRequestTest extends TestCase
         // #101 was handed out on paper meanwhile -> skipped
         Ticket::where('event_id', $this->event->id)->where('ticket_number', 101)->update(['sold_at' => now(), 'name' => 'Paper guest']);
 
-        $this->actingAs($this->userWithRole(3))->postJson("/api/requests/{$req->id}/approve", ['attendees' => ['X']])->assertForbidden();
-        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => ['A', 'B', 'C']])->assertStatus(422);
+        $this->actingAs($this->userWithRole(3))->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['X'])])->assertForbidden();
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['A', 'B', 'C'])])->assertStatus(422);
 
-        $res = $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => ['Maria Popescu', 'Ion Popescu'], 'guest_category' => 'family'])
+        $res = $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['Maria Popescu', 'Ion Popescu'], 'family')])
             ->assertOk()->assertJson(['status' => 'approved']);
         $this->assertSame([102, 103], collect($res->json('tickets'))->pluck('ticket_number')->sort()->values()->all());
 
         $t = Ticket::where('request_id', $req->id)->orderBy('ticket_number')->get();
         $this->assertSame(['Maria Popescu', 'Ion Popescu'], $t->pluck('name')->all());
         $this->assertSame('family', $t[0]->guest_category);
+        $this->assertSame('Maria Popescu', $req->fresh()->guestList()[0]['name']);
         $this->assertNotNull($t[0]->sold_at);
 
-        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => ['Z']])->assertStatus(409);
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['Z'])])->assertStatus(409);
 
         // e-tickets work at the door like any assigned ticket
         $this->actingAs($this->userWithRole(2))->postJson("/api/tickets/{$t[0]->ticket_code}/checkin", ['event_id' => $this->event->id])->assertOk();
@@ -123,7 +142,7 @@ class TicketRequestTest extends TestCase
         $req = TicketRequest::first();
         $manager = $this->userWithRole(4);
         $this->actingAs($manager)->postJson("/api/requests/{$req->id}/send")->assertStatus(409); // not approved yet
-        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => ['Maria Popescu', 'Ion Popescu']])->assertOk();
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['Maria Popescu', 'Ion Popescu'])])->assertOk();
 
         $this->actingAs($manager)->post("/api/requests/{$req->id}/send", [
             'designs' => [UploadedFile::fake()->image('a.jpg', 800, 280), UploadedFile::fake()->image('b.jpg', 800, 280)],
@@ -152,7 +171,7 @@ class TicketRequestTest extends TestCase
         Mail::assertSent(RequestDeclinedMail::class, fn ($m) => $m->hasTo('b@example.com'));
         $this->assertSame('rejected', $r2->fresh()->status);
 
-        $this->actingAs($manager)->postJson("/api/requests/{$r1->id}/approve", ['attendees' => ['Maria Popescu', 'Ion Popescu']])->assertOk();
+        $this->actingAs($manager)->postJson("/api/requests/{$r1->id}/approve", ['attendees' => $this->guests(['Maria Popescu', 'Ion Popescu'])])->assertOk();
         $this->actingAs($manager)->postJson("/api/requests/{$r1->id}/cancel")->assertOk()->assertJson(['released' => 2]);
         $this->assertSame(0, Ticket::whereNotNull('request_id')->count());
         $this->assertSame(50, $this->event->eticketPool()->count());
@@ -180,7 +199,7 @@ class TicketRequestTest extends TestCase
         $this->ask()->assertCreated();
         $req = TicketRequest::first();
         $manager = $this->userWithRole(4);
-        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => ['Maria Popescu', 'Ion Popescu']])->assertOk();
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['Maria Popescu', 'Ion Popescu'])])->assertOk();
         $this->actingAs($manager)->postJson("/api/requests/{$req->id}/send")->assertOk();
 
         Http::assertSent(fn ($r) => str_contains($r->url(), 'login.microsoftonline.com/tenant-1/oauth2/v2.0/token')
@@ -213,7 +232,7 @@ class TicketRequestTest extends TestCase
         $this->ask()->assertCreated();
         $req = TicketRequest::first();
         $manager = $this->userWithRole(4);
-        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => ['Maria Popescu']])->assertOk();
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['Maria Popescu'])])->assertOk();
         $res = $this->actingAs($manager)->postJson("/api/requests/{$req->id}/send")->assertStatus(502);
 
         $this->assertStringContainsString('invalid_client', $res->json('message'));
@@ -245,10 +264,10 @@ class TicketRequestTest extends TestCase
             'graph.microsoft.com/*' => Http::response(null, 202),
         ]);
 
-        $this->ask(['attendees' => ['Maria Popescu']])->assertCreated();
+        $this->ask(['attendees' => $this->guests(['Maria Popescu'])])->assertCreated();
         $req = TicketRequest::first();
         $manager = $this->userWithRole(4);
-        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => ['Maria Popescu']])->assertOk();
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['Maria Popescu'])])->assertOk();
         $this->actingAs($manager)->postJson("/api/requests/{$req->id}/send")->assertOk();
 
         $b64d = fn (string $v) => base64_decode(strtr($v, '-_', '+/').str_repeat('=', (4 - strlen($v) % 4) % 4));
@@ -275,5 +294,38 @@ class TicketRequestTest extends TestCase
             return true;
         });
         Http::assertSent(fn ($r) => str_contains($r->url(), 'graph.microsoft.com') && $r->hasHeader('Authorization', 'Bearer tok-cert'));
+    }
+
+    public function test_refund_and_cancel_can_notify_the_eticket_holder(): void
+    {
+        Mail::fake();
+        $this->ask()->assertCreated();
+        $this->ask(['email' => 'z@example.com', 'attendees' => ['Zoe']])->assertCreated();
+        [$r1, $r2] = TicketRequest::orderBy('id')->get()->all();
+        $manager = $this->userWithRole(4);
+        $this->actingAs($manager)->postJson("/api/requests/{$r1->id}/approve", ['attendees' => $this->guests(['Maria Popescu', 'Ion Popescu'])])->assertOk();
+        $this->actingAs($manager)->postJson("/api/requests/{$r2->id}/approve", ['attendees' => $this->guests(['Zoe'])])->assertOk();
+
+        // single e-ticket refund with notification
+        $code = Ticket::where('request_id', $r1->id)->orderBy('ticket_number')->value('ticket_code');
+        $this->actingAs($manager)->postJson("/api/tickets/{$code}/refund", ['notify' => true])->assertOk()->assertJson(['notified' => true]);
+        Mail::assertSent(TicketCancelledMail::class, fn ($m) => $m->hasTo('parinte@example.com') && count($m->tickets) === 1 && $m->tickets[0]['code'] === $code);
+
+        // without notify: silent
+        $code2 = Ticket::where('request_id', $r1->id)->value('ticket_code');
+        $this->actingAs($manager)->postJson("/api/tickets/{$code2}/refund")->assertOk()->assertJson(['notified' => false]);
+        Mail::assertSentCount(1);
+
+        // whole request cancelled with notification
+        $this->actingAs($manager)->postJson("/api/requests/{$r2->id}/cancel", ['notify' => true])->assertOk()->assertJson(['notified' => true]);
+        Mail::assertSent(TicketCancelledMail::class, fn ($m) => $m->hasTo('z@example.com'));
+
+        // door sees e-tickets as such (so staff hand over the printed copy)
+        $this->ask(['email' => 'w@example.com', 'attendees' => ['Walt']])->assertCreated();
+        $r3 = TicketRequest::where('email', 'w@example.com')->first();
+        $this->actingAs($manager)->postJson("/api/requests/{$r3->id}/approve", ['attendees' => $this->guests(['Walt'])])->assertOk();
+        $t = Ticket::where('request_id', $r3->id)->first();
+        $this->actingAs($this->userWithRole(2))->postJson("/api/tickets/{$t->ticket_code}/checkin", ['event_id' => $this->event->id])
+            ->assertOk()->assertJson(['ticket' => ['is_eticket' => true, 'ticket_number' => $t->ticket_number]]);
     }
 }

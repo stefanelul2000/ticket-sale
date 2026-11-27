@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useI18n, useT } from '../../../i18n';
 import { api, errorMessage } from '../../../lib/api';
 import { fmtTime, fmtWeekdayDate } from '../../../lib/format';
+import { GUEST_CATEGORIES, categoryKey } from '../../../lib/constants';
 import { Button } from '../../components/ui/Button';
 import { Input, Textarea } from '../../components/ui/Input';
 import { Loading } from '../../components/ui/Misc';
@@ -17,7 +18,7 @@ export function PublicRequestPage() {
   const { slug } = useParams();
   const [event, setEvent] = useState<PublicEvent | null>(null);
   const [missing, setMissing] = useState(false);
-  const [names, setNames] = useState<string[]>(['']);
+  const [guests, setGuests] = useState<{ name: string; guest_category: string }[]>([{ name: '', guest_category: '' }]);
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
@@ -43,7 +44,7 @@ export function PublicRequestPage() {
     setSending(true);
     try {
       await api.publicRequest(event.slug, {
-        attendees: names.map((n) => n.trim()).filter(Boolean),
+        attendees: guests.filter((g) => g.name.trim()).map((g) => ({ name: g.name.trim(), guest_category: g.guest_category })),
         email: email.trim(),
         phone: phone.trim() || null,
         message: message.trim() || null,
@@ -107,27 +108,47 @@ export function PublicRequestPage() {
 
         <fieldset className="space-y-3">
           <legend className="mb-1 text-sm font-semibold">{t('req.names')}</legend>
-          {names.map((n, i) => (
-            <div key={i} className="flex items-end gap-2">
+          {guests.map((g, i) => (
+            <div key={i} className="grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_200px_auto] sm:items-end">
               <Input
-                wrapperClassName="flex-1"
                 aria-label={t('req.personN', { n: i + 1 })}
                 placeholder={t('req.personN', { n: i + 1 })}
-                value={n}
+                value={g.name}
                 required
                 maxLength={120}
                 autoComplete={i === 0 ? 'name' : 'off'}
-                onChange={(e) => setNames((list) => list.map((x, j) => (j === i ? e.target.value : x)))}
+                onChange={(e) => setGuests((list) => list.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                wrapperClassName="col-span-2 sm:col-span-1"
               />
-              {names.length > 1 && (
-                <Button variant="ghost" onClick={() => setNames((list) => list.filter((_, j) => j !== i))} aria-label={t('common.delete')}>
+              <select
+                required
+                aria-label={t('req.whoIs', { n: i + 1 })}
+                value={g.guest_category}
+                onChange={(e) => setGuests((list) => list.map((x, j) => (j === i ? { ...x, guest_category: e.target.value } : x)))}
+                onInvalid={(e) => e.currentTarget.setCustomValidity(t('req.whoIsRequired'))}
+                onInput={(e) => e.currentTarget.setCustomValidity('')}
+                className={`select h-10 w-full rounded border border-linestrong bg-surface px-3 text-sm focus:border-accent focus:outline-none ${g.guest_category ? 'text-ink' : 'text-muted'}`}
+              >
+                <option value="" disabled>
+                  {t('req.whoIsPlaceholder')}
+                </option>
+                {GUEST_CATEGORIES.map((c) => (
+                  <option key={c} value={c}>
+                    {t(categoryKey(c))}
+                  </option>
+                ))}
+              </select>
+              {guests.length > 1 ? (
+                <Button variant="ghost" onClick={() => setGuests((list) => list.filter((_, j) => j !== i))} aria-label={t('common.delete')}>
                   ✕
                 </Button>
+              ) : (
+                <span className="hidden sm:block sm:w-10" />
               )}
             </div>
           ))}
-          {names.length < max && (
-            <Button variant="secondary" size="sm" onClick={() => setNames((list) => [...list, ''])}>
+          {guests.length < max && (
+            <Button variant="secondary" size="sm" onClick={() => setGuests((list) => [...list, { name: '', guest_category: '' }])}>
               <IconPlus size={16} /> {t('req.addPerson')}
             </Button>
           )}
@@ -148,8 +169,22 @@ export function PublicRequestPage() {
         </div>
 
         <label className="flex items-start gap-3 text-sm">
-          <input type="checkbox" required checked={consent} onChange={(e) => setConsent(e.target.checked)} className="mt-1 h-4 w-4 accent-[var(--a-accent)]" />
-          <span>{t('req.consent')}</span>
+          <input
+            type="checkbox"
+            required
+            aria-required="true"
+            checked={consent}
+            onInvalid={(e) => e.currentTarget.setCustomValidity(t('req.consentRequired'))}
+            onChange={(e) => {
+              e.currentTarget.setCustomValidity('');
+              setConsent(e.target.checked);
+            }}
+            className="mt-1 h-4 w-4 accent-[var(--a-accent)]"
+          />
+          <span>
+            {t('req.consent')} <span className="font-bold text-danger" aria-hidden="true">*</span>
+            <span className="mt-0.5 block text-xs text-soft">{t('req.consentRequiredHint')}</span>
+          </span>
         </label>
 
         {error && <p className="rounded bg-dangerbg px-3 py-2 text-sm font-semibold text-danger">{error}</p>}

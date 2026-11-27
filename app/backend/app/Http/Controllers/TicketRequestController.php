@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Mail\ETicketMail;
 use App\Mail\NewRequestMail;
 use App\Mail\RequestDeclinedMail;
+use App\Mail\TicketCancelledMail;
 use App\Models\Event;
 use App\Models\Ticket;
 use App\Models\TicketActivityLog;
@@ -42,11 +43,15 @@ class TicketRequestController extends Controller
             'email' => ['required', 'string', 'email:rfc', 'max:190'],
             'phone' => ['nullable', 'string', 'max:25', 'regex:/^[0-9 +().\/-]{6,25}$/'],
             'attendees' => ['required', 'array', 'min:1', "max:{$max}"],
-            'attendees.*' => self::NAME_RULE,
+            'attendees.*.name' => self::NAME_RULE,
+            'attendees.*.guest_category' => ['required', GuestCategory::rule()],
             'message' => ['nullable', 'string', 'max:500'],
             'consent' => ['accepted'],
             'locale' => ['nullable', 'in:ro,en'],
             'website' => ['nullable', 'string', 'max:200'], // honeypot: real people never fill it
+        ], [
+            'consent.accepted' => __('Tick the consent box to send your request.'),
+            'consent.required' => __('Tick the consent box to send your request.'),
         ]);
 
         // Bots fill every field: pretend success, store nothing.
@@ -54,7 +59,10 @@ class TicketRequestController extends Controller
             return response()->json(['status' => 'received'], 201);
         }
 
-        $attendees = array_values(array_map(fn ($n) => trim(preg_replace('/\s+/u', ' ', $n)), $data['attendees']));
+        $attendees = array_values(array_map(fn ($a) => [
+            'name' => trim(preg_replace('/\s+/u', ' ', $a['name'])),
+            'guest_category' => $a['guest_category'],
+        ], $data['attendees']));
         $email = mb_strtolower(trim($data['email']));
 
         $result = DB::transaction(function () use ($event, $data, $attendees, $email, $request) {
@@ -141,13 +149,17 @@ class TicketRequestController extends Controller
     {
         $data = $request->validate([
             'attendees' => ['required', 'array', 'min:1', 'max:10'],
-            'attendees.*' => self::NAME_RULE,
-            'guest_category' => ['nullable', GuestCategory::rule()],
+            'attendees.*.name' => self::NAME_RULE,
+            'attendees.*.guest_category' => ['nullable', GuestCategory::rule()],
         ]);
-        $names = array_values(array_map('trim', $data['attendees']));
+        $guests = array_values(array_map(fn ($a) => [
+            'name' => trim($a['name']),
+            'guest_category' => $a['guest_category'] ?? null,
+        ], $data['attendees']));
+        $names = array_column($guests, 'name');
         $userId = $request->user()->id;
 
-        $result = DB::transaction(function () use ($requestId, $names, $data, $userId) {
+        $result = DB::transaction(function () use ($requestId, $names, $guests, $userId) {
             $req = TicketRequest::whereKey($requestId)->lockForUpdate()->firstOrFail();
             if ($req->status !== 'pending') {
                 return response()->json(['message' => __('This request was already handled.')], 409);
@@ -165,8 +177,8 @@ class TicketRequestController extends Controller
             $now = Carbon::now();
             foreach ($free->values() as $i => $ticket) {
                 Ticket::whereKey($ticket->id)->update([
-                    'name' => $names[$i],
-                    'guest_category' => $data['guest_category'] ?? null,
+                    'name' => $guests[$i]['name'],
+                    'guest_category' => $guests[$i]['guest_category'],
                     'user_id' => $userId,
                     'sold_at' => $now,
                     'request_id' => $req->id,
@@ -185,7 +197,7 @@ class TicketRequestController extends Controller
 
             $req->update([
                 'status' => 'approved',
-                'attendees' => $names,
+                'attendees' => $guests,
                 'decided_by' => $userId,
                 'decided_at' => $now,
             ]);
@@ -290,10 +302,13 @@ class TicketRequestController extends Controller
     /** Withdraw an approved request: its unused tickets go back to the e-ticket pool. */
     public function cancel(Request $request, int $requestId)
     {
-        $req = TicketRequest::findOrFail($requestId);
+        $notify = (bool) ($request->validate(['notify' => ['nullable', 'boolean']])['notify'] ?? false);
+        $req = TicketRequest::with('event')->findOrFail($requestId);
         if ($req->status !== 'approved') {
             return response()->json(['message' => __('Only approved requests can be cancelled.')], 409);
         }
+        $cancelledTickets = $req->tickets()->where('checkin', false)->orderBy('ticket_number')->get()
+            ->map(fn (Ticket $t) => ['name' => $t->name, 'number' => $t->ticket_number, 'code' => $t->ticket_code])->all();
 
         $released = DB::transaction(function () use ($req) {
             $n = Ticket::where('request_id', $req->id)->where('checkin', false)->update([
@@ -308,8 +323,17 @@ class TicketRequestController extends Controller
 
             return $n;
         });
-        $this->logAdminAction($request->user()->id, 'request.cancel', ['request_id' => $req->id, 'released' => $released]);
+        $notified = false;
+        if ($notify && $cancelledTickets && self::mailConfigured()) {
+            try {
+                Mail::to($req->email)->send(new TicketCancelledMail($req->event, $cancelledTickets, $req->locale));
+                $notified = true;
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
+        $this->logAdminAction($request->user()->id, 'request.cancel', ['request_id' => $req->id, 'released' => $released, 'notified' => $notified]);
 
-        return response()->json(['cancelled' => true, 'released' => $released]);
+        return response()->json(['cancelled' => true, 'released' => $released, 'notified' => $notified]);
     }
 }

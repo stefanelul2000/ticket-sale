@@ -26,6 +26,10 @@ type Data = {
 };
 
 /** Romanian mobile numbers (07…) become 407… for wa.me links. */
+type Guest = { name: string; guest_category: string };
+const guestsOf = (r: TicketRequestT): Guest[] =>
+  r.attendees.map((a) => (typeof a === 'string' ? { name: a, guest_category: '' } : { name: a.name, guest_category: a.guest_category ?? '' }));
+
 const waNumber = (phone?: string | null) => {
   const digits = (phone ?? '').replace(/\D/g, '');
   if (!digits) return null;
@@ -41,6 +45,8 @@ export function RequestsTab({ event, onChanged }: { event: EventT; onChanged: ()
   const [data, setData] = useState<Data | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<TicketRequestT | null>(null);
+  const [cancelling, setCancelling] = useState<TicketRequestT | null>(null);
+  const [cancelNotify, setCancelNotify] = useState(true);
 
   const publicUrl = settings.public_url || window.location.origin;
 
@@ -109,11 +115,13 @@ export function RequestsTab({ event, onChanged }: { event: EventT; onChanged: ()
     }
   };
 
-  const approve = async (r: TicketRequestT, names: string[], category: string, andSend: boolean) => {
+  const approve = async (r: TicketRequestT, guests: Guest[], andSend: boolean) => {
     setBusy(`approve-${r.id}`);
     try {
-      const approved: TicketRequestT = await api.approveRequest(r.id, { attendees: names, guest_category: category || null });
-      toast(t('reqs.approved', { n: approved.tickets?.length ?? names.length }), 'ok');
+      const approved: TicketRequestT = await api.approveRequest(r.id, {
+        attendees: guests.map((g) => ({ name: g.name.trim(), guest_category: g.guest_category || null })),
+      });
+      toast(t('reqs.approved', { n: approved.tickets?.length ?? guests.length }), 'ok');
       onChanged();
       if (andSend) await send(approved);
       else await load();
@@ -124,12 +132,12 @@ export function RequestsTab({ event, onChanged }: { event: EventT; onChanged: ()
     }
   };
 
-  const cancel = async (r: TicketRequestT) => {
-    if (!window.confirm(t('reqs.cancelConfirm'))) return;
+  const cancel = async (r: TicketRequestT, withEmail: boolean) => {
     setBusy(`cancel-${r.id}`);
     try {
-      const res = await api.cancelRequest(r.id);
-      toast(t('reqs.cancelled', { n: res.released }), 'ok');
+      const res = await api.cancelRequest(r.id, withEmail);
+      toast(res.notified ? t('reqs.cancelledNotified', { n: res.released }) : t('reqs.cancelled', { n: res.released }), 'ok');
+      setCancelling(null);
       onChanged();
       await load();
     } catch (err) {
@@ -222,7 +230,10 @@ export function RequestsTab({ event, onChanged }: { event: EventT; onChanged: ()
               onApprove={approve}
               onSend={send}
               onReject={() => setRejecting(r)}
-              onCancel={cancel}
+              onCancel={(req) => {
+                setCancelNotify(true);
+                setCancelling(req);
+              }}
               onCopy={() => copy(linksText(r))}
               waText={linksText(r)}
             />
@@ -230,6 +241,31 @@ export function RequestsTab({ event, onChanged }: { event: EventT; onChanged: ()
         </div>
       )}
 
+      {cancelling && (
+        <Modal
+          open
+          title={t('reqs.cancelTitle', { email: cancelling.email })}
+          onClose={() => setCancelling(null)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setCancelling(null)}>{t('common.cancel')}</Button>
+              <Button variant="danger" loading={busy === `cancel-${cancelling.id}`} onClick={() => cancel(cancelling, !!data?.mail_configured && cancelNotify)}>
+                {t('reqs.cancel')}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4 text-sm">
+            <p>{t('reqs.cancelConfirm')}</p>
+            {data?.mail_configured && (
+              <label className="flex items-start gap-2">
+                <input type="checkbox" checked={cancelNotify} onChange={(e) => setCancelNotify(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--a-accent)]" />
+                <span>{t('reqs.cancelNotify', { email: cancelling.email })}</span>
+              </label>
+            )}
+          </div>
+        </Modal>
+      )}
       {rejecting && (
         <RejectModal
           r={rejecting}
@@ -261,7 +297,7 @@ function RequestCard({
   busy: string | null;
   mailConfigured: boolean;
   publicUrl: string;
-  onApprove: (r: TicketRequestT, names: string[], category: string, andSend: boolean) => void;
+  onApprove: (r: TicketRequestT, guests: Guest[], andSend: boolean) => void;
   onSend: (r: TicketRequestT) => void;
   onReject: () => void;
   onCancel: (r: TicketRequestT) => void;
@@ -269,10 +305,10 @@ function RequestCard({
   waText: string;
 }) {
   const t = useT();
-  const [names, setNames] = useState<string[]>(r.attendees);
+  const [guests, setGuests] = useState<Guest[]>(guestsOf(r));
   const [include, setInclude] = useState<boolean[]>(r.attendees.map(() => true));
-  const [category, setCategory] = useState('');
-  const chosen = names.filter((_, i) => include[i]).map((n) => n.trim());
+  const chosen = guests.filter((_, i) => include[i]);
+  const invalid = !chosen.length || chosen.some((g) => !g.name.trim());
   const wa = waNumber(r.phone);
   const tone = r.status === 'pending' ? 'warn' : r.status === 'approved' ? 'ok' : 'neutral';
 
@@ -294,27 +330,27 @@ function RequestCard({
       {r.status === 'pending' ? (
         <div className="mt-4 space-y-3">
           <div className="text-sm font-semibold">{t('reqs.guests', { n: r.quantity })}</div>
-          {names.map((n, i) => (
-            <label key={i} className="flex items-center gap-2">
+          {guests.map((g, i) => (
+            <div key={i} className="flex flex-wrap items-center gap-2">
               <input type="checkbox" checked={include[i]} onChange={(e) => setInclude((arr) => arr.map((x, j) => (j === i ? e.target.checked : x)))} className="h-4 w-4 accent-[var(--a-accent)]" aria-label={t('reqs.include')} />
               <input
-                value={n}
+                value={g.name}
                 maxLength={120}
-                onChange={(e) => setNames((arr) => arr.map((x, j) => (j === i ? e.target.value : x)))}
-                className={clsx('h-9 flex-1 rounded border border-linestrong bg-surface px-3 text-sm focus:border-accent focus:outline-none', !include[i] && 'text-muted line-through')}
+                onChange={(e) => setGuests((arr) => arr.map((x, j) => (j === i ? { ...x, name: e.target.value } : x)))}
+                className={clsx('h-9 min-w-[160px] flex-1 rounded border border-linestrong bg-surface px-3 text-sm focus:border-accent focus:outline-none', !include[i] && 'text-muted line-through')}
               />
-            </label>
+              <div className="w-44">
+                <CategorySelect value={g.guest_category} onChange={(v) => setGuests((arr) => arr.map((x, j) => (j === i ? { ...x, guest_category: v } : x)))} />
+              </div>
+            </div>
           ))}
-          <div className="max-w-xs">
-            <CategorySelect value={category} onChange={setCategory} />
-          </div>
           <div className="flex flex-wrap gap-2 pt-1">
             {mailConfigured && (
-              <Button onClick={() => onApprove(r, chosen, category, true)} loading={busy === `approve-${r.id}` || busy === `send-${r.id}`} disabled={!chosen.length || chosen.some((n) => !n)}>
+              <Button onClick={() => onApprove(r, chosen, true)} loading={busy === `approve-${r.id}` || busy === `send-${r.id}`} disabled={invalid}>
                 {t('reqs.approveSend', { n: chosen.length })}
               </Button>
             )}
-            <Button variant={mailConfigured ? 'secondary' : 'primary'} onClick={() => onApprove(r, chosen, category, false)} loading={busy === `approve-${r.id}`} disabled={!chosen.length || chosen.some((n) => !n)}>
+            <Button variant={mailConfigured ? 'secondary' : 'primary'} onClick={() => onApprove(r, chosen, false)} loading={busy === `approve-${r.id}`} disabled={invalid}>
               {t('reqs.approveOnly', { n: chosen.length })}
             </Button>
             <Button variant="danger" onClick={onReject}>{t('reqs.reject')}</Button>
@@ -338,7 +374,7 @@ function RequestCard({
               ))}
             </ul>
           ) : (
-            <p className="text-sm text-soft">{r.attendees.join(', ')}</p>
+            <p className="text-sm text-soft">{guestsOf(r).map((g) => g.name).join(', ')}</p>
           )}
 
           {r.status === 'approved' && (

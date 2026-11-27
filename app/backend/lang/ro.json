@@ -68,5 +68,9 @@
   "Email sending is not configured yet.": "Trimiterea emailurilor nu este încă configurată.",
   "This request has no tickets anymore.": "Cererea nu mai are bilete.",
   "The email could not be sent: :error": "Emailul nu a putut fi trimis: :error",
-  "Only approved requests can be cancelled.": "Doar cererile aprobate pot fi anulate."
+  "Only approved requests can be cancelled.": "Doar cererile aprobate pot fi anulate.",
+  "Tick the consent box to send your request.": "Bifează acordul ca să poți trimite cererea.",
+  "Your e-ticket was cancelled: :event": "E-biletul tău a fost anulat: :event",
+  "The following e-ticket has been cancelled and can no longer be used at the entrance:|The following e-tickets have been cancelled and can no longer be used at the entrance:": "Următorul e-bilet a fost anulat și nu mai poate fi folosit la intrare:|Următoarele e-bilete au fost anulate și nu mai pot fi folosite la intrare:",
+  "If this is a mistake, simply reply to this email.": "Dacă este o greșeală, răspunde la acest email."
 }

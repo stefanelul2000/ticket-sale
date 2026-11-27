@@ -95,7 +95,7 @@ export const api = {
 
   // e-ticket requests (staff)
   eventRequests: (eventId: number, status = 'pending') => client.get(`/events/${eventId}/requests`, { params: { status } }).then((r) => r.data),
-  approveRequest: (id: number, payload: { attendees: string[]; guest_category?: string | null }) =>
+  approveRequest: (id: number, payload: { attendees: { name: string; guest_category: string | null }[] }) =>
     client.post(`/requests/${id}/approve`, payload).then((r) => r.data),
   sendRequest: (id: number, designs: Blob[] = []) => {
     const form = new FormData();
@@ -103,7 +103,7 @@ export const api = {
     return client.post(`/requests/${id}/send`, form).then((r) => r.data);
   },
   rejectRequest: (id: number, payload: { note?: string | null; notify: boolean }) => client.post(`/requests/${id}/reject`, payload).then((r) => r.data),
-  cancelRequest: (id: number) => client.post(`/requests/${id}/cancel`).then((r) => r.data),
+  cancelRequest: (id: number, notify = false) => client.post(`/requests/${id}/cancel`, { notify }).then((r) => r.data),
   mailStatus: () => client.get('/settings/mail').then((r) => r.data),
   testMail: (to: string) => client.post('/settings/mail/test', { to }).then((r) => r.data),
 
@@ -151,7 +151,7 @@ export const api = {
     client.post(`/tickets/${code(ticketCode)}/sell`, payload).then((r) => r.data),
   updateTicket: (ticketCode: string, payload: { name?: string; guest_category?: string | null }) =>
     client.patch(`/tickets/${code(ticketCode)}`, payload).then((r) => r.data),
-  refund: (ticketCode: string) => client.post(`/tickets/${code(ticketCode)}/refund`).then((r) => r.data),
+  refund: (ticketCode: string, notify = false) => client.post(`/tickets/${code(ticketCode)}/refund`, { notify }).then((r) => r.data),
   stats: (event_id?: number | null) => client.get('/stats', { params: event_id ? { event_id } : undefined }).then((r) => r.data),
   ticketActivity: (params?: { limit?: number; event_id?: number | null }) =>
     client.get('/ticket-activity', { params: { limit: params?.limit, event_id: params?.event_id || undefined } }).then((r) => r.data),

@@ -13,13 +13,14 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Card } from '../../components/ui/Card';
 import { Loading } from '../../components/ui/Misc';
+import { Modal } from '../../components/ui/Modal';
 import { CategorySelect } from '../../components/EventBits';
 import { IconDownload, IconSearch } from '../../components/Icons';
 import { EditGuestModal } from '../AssignPage';
 
 type Status = '' | 'assigned' | 'unassigned' | 'checked_in' | 'not_checked_in' | 'walk_in' | 'eticket';
 type Sort = 'number' | 'name' | 'assigned' | 'checked_in';
-type Counts = { total: number; sold: number; unsold: number; checked_in: number; walk_ins: number; etickets?: number };
+type Counts = { total: number; sold: number; unsold: number; checked_in: number; walk_ins: number; etickets?: number; mail_configured?: boolean };
 
 /** Every ticket of the event: who holds it, who handed it out (and when), who came in. */
 export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () => void }) {
@@ -35,6 +36,8 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
   const [counts, setCounts] = useState<Counts | null>(null);
   const [editing, setEditing] = useState<TicketRow | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [refunding, setRefunding] = useState<TicketRow | null>(null);
+  const [notify, setNotify] = useState(true);
 
   useEffect(() => {
     const id = setTimeout(() => {
@@ -69,15 +72,12 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
     load();
   }, [load]);
 
-  const refund = async (row: TicketRow) => {
-    const msg = row.checkin
-      ? t('guest.refundConfirmCheckedIn', { code: row.ticket_code, name: row.name ?? '—' })
-      : t('guest.refundConfirm', { code: row.ticket_code, name: row.name ?? '—' });
-    if (!window.confirm(msg)) return;
+  const refund = async (row: TicketRow, withEmail: boolean) => {
     setBusy(row.id);
     try {
-      await api.refund(row.ticket_code);
-      toast(t('guest.refunded', { code: row.ticket_code }), 'ok');
+      const res = await api.refund(row.ticket_code, withEmail);
+      toast(res.notified ? t('guest.refundedNotified', { code: row.ticket_code }) : t('guest.refunded', { code: row.ticket_code }), 'ok');
+      setRefunding(null);
       load();
       onChanged();
     } catch (err) {
@@ -257,7 +257,10 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
                           </button>
                         )}
                         {r.sold_at && role >= 4 && (
-                          <button type="button" disabled={busy === r.id} className="text-sm font-semibold text-danger hover:underline disabled:opacity-50" onClick={() => refund(r)}>
+                          <button type="button" disabled={busy === r.id} className="text-sm font-semibold text-danger hover:underline disabled:opacity-50" onClick={() => {
+                            setNotify(true);
+                            setRefunding(r);
+                          }}>
                             {t('guest.refund')}
                           </button>
                         )}
@@ -281,6 +284,41 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
         </>
       )}
       {editing && <EditGuestModal ticket={editing} onClose={() => setEditing(null)} onSaved={() => load()} />}
+      {refunding && (
+        <Modal
+          open
+          title={t('guest.refundTitle', { code: refunding.ticket_code })}
+          onClose={() => setRefunding(null)}
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setRefunding(null)}>{t('common.cancel')}</Button>
+              <Button variant="danger" loading={busy === refunding.id} onClick={() => refund(refunding, !!refunding.request_id && !!counts?.mail_configured && notify)}>
+                {t('guest.refund')}
+              </Button>
+            </>
+          }
+        >
+          <div className="space-y-4 text-sm">
+            <p>
+              {refunding.checkin
+                ? t('guest.refundConfirmCheckedIn', { code: refunding.ticket_code, name: refunding.name ?? '—' })
+                : t('guest.refundConfirm', { code: refunding.ticket_code, name: refunding.name ?? '—' })}
+            </p>
+            {refunding.request_id ? (
+              counts?.mail_configured ? (
+                <label className="flex items-start gap-2">
+                  <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--a-accent)]" />
+                  <span>{t('guest.refundNotify')}</span>
+                </label>
+              ) : (
+                <p className="text-soft">{t('guest.refundNoMail')}</p>
+              )
+            ) : (
+              <p className="text-soft">{t('guest.refundPaper')}</p>
+            )}
+          </div>
+        </Modal>
+      )}
     </Card>
   );
 }
