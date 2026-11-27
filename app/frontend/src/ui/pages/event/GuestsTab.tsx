@@ -69,12 +69,15 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
     load();
   }, [load]);
 
-  const release = async (row: TicketRow) => {
-    if (!window.confirm(t('guest.releaseConfirm', { code: row.ticket_code, name: row.name ?? '—' }))) return;
+  const refund = async (row: TicketRow) => {
+    const msg = row.checkin
+      ? t('guest.refundConfirmCheckedIn', { code: row.ticket_code, name: row.name ?? '—' })
+      : t('guest.refundConfirm', { code: row.ticket_code, name: row.name ?? '—' });
+    if (!window.confirm(msg)) return;
     setBusy(row.id);
     try {
       await api.refund(row.ticket_code);
-      toast(t('guest.released'), 'ok');
+      toast(t('guest.refunded', { code: row.ticket_code }), 'ok');
       load();
       onChanged();
     } catch (err) {
@@ -253,9 +256,9 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
                             {t('common.edit')}
                           </button>
                         )}
-                        {r.sold_at && !r.checkin && role >= 4 && (
-                          <button type="button" disabled={busy === r.id} className="text-sm font-semibold text-danger hover:underline disabled:opacity-50" onClick={() => release(r)}>
-                            {t('guest.release')}
+                        {r.sold_at && role >= 4 && (
+                          <button type="button" disabled={busy === r.id} className="text-sm font-semibold text-danger hover:underline disabled:opacity-50" onClick={() => refund(r)}>
+                            {t('guest.refund')}
                           </button>
                         )}
                       </td>

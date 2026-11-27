@@ -15,6 +15,7 @@ import { AssignPage } from './ui/pages/AssignPage';
 import { EventsPage } from './ui/pages/EventsPage';
 import { EventDetailPage } from './ui/pages/event/EventDetailPage';
 import { ReportsPage } from './ui/pages/ReportsPage';
+import { TicketsPage } from './ui/pages/TicketsPage';
 import { UsersPage } from './ui/pages/UsersPage';
 import { SettingsPage } from './ui/pages/SettingsPage';
 import { PublicEventPage, PublicNotFound } from './ui/pages/public/PublicEventPage';
@@ -79,6 +80,7 @@ export const router = createBrowserRouter([
           { index: true, element: <DashboardPage /> },
           { path: 'door', element: <RequireRole allow={allow('/door')}><DoorPage /></RequireRole> },
           { path: 'assign', element: <RequireRole allow={allow('/assign')}><AssignPage /></RequireRole> },
+          { path: 'tickets', element: <RequireRole allow={allow('/tickets')}><TicketsPage /></RequireRole> },
           { path: 'events', element: <RequireRole allow={allow('/events')}><EventsPage /></RequireRole> },
           { path: 'events/:id', element: <RequireRole allow={allow('/events')}><EventDetailPage /></RequireRole> },
           { path: 'reports', element: <RequireRole allow={allow('/reports')}><ReportsPage /></RequireRole> },

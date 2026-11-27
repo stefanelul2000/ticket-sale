@@ -9,7 +9,7 @@ import { roleKey } from '../lib/constants';
 import { Logo } from '../ui/components/ui/Misc';
 import { Preferences } from '../ui/components/Preferences';
 import { Button } from '../ui/components/ui/Button';
-import { IconCalendar, IconChart, IconHome, IconLogout, IconMenu, IconScan, IconSettings, IconTicket, IconUsers } from '../ui/components/Icons';
+import { IconCalendar, IconChart, IconHome, IconList, IconLogout, IconMenu, IconScan, IconSettings, IconTicket, IconUsers } from '../ui/components/Icons';
 
 type NavItem = { to: string; label: TKey; icon: ComponentType<{ size?: number }>; allow: (role: number) => boolean; end?: boolean };
 
@@ -17,6 +17,7 @@ export const NAV: NavItem[] = [
   { to: '/', label: 'nav.dashboard', icon: IconHome, allow: () => true, end: true },
   { to: '/door', label: 'nav.door', icon: IconScan, allow: (r) => r >= 2 && r !== 3 },
   { to: '/assign', label: 'nav.assign', icon: IconTicket, allow: (r) => r >= 3 },
+  { to: '/tickets', label: 'nav.tickets', icon: IconList, allow: (r) => r >= 2 && r !== 3 },
   { to: '/events', label: 'nav.events', icon: IconCalendar, allow: (r) => r >= 4 },
   { to: '/reports', label: 'nav.reports', icon: IconChart, allow: (r) => r >= 1 },
   { to: '/users', label: 'nav.users', icon: IconUsers, allow: (r) => r >= 5 },

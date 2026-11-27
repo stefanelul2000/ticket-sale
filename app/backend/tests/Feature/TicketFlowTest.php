@@ -168,7 +168,18 @@ class TicketFlowTest extends TestCase
 
         $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/sell", ['event_id' => $this->eventOf($codes[1]), 'name' => 'B'])->assertOk();
         $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/checkin", ['event_id' => $this->eventOf($codes[1])])->assertOk();
-        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/refund")->assertStatus(409); // already used
+        // Managers can refund even after check-in (e.g. a test ticket): everything is reset.
+        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/refund")->assertOk()->assertJson(['was_checked_in' => true]);
+        $t = Ticket::where('ticket_code', $codes[1])->first();
+        $this->assertNull($t->sold_at);
+        $this->assertFalse($t->checkin);
+        $this->assertNull($t->checked_in_at);
+        $this->assertNull($t->name);
+
+        // Volunteers and door staff cannot refund.
+        $this->actingAs($manager)->postJson("/api/tickets/{$codes[1]}/sell", ['event_id' => $this->eventOf($codes[1]), 'name' => 'C'])->assertOk();
+        $this->actingAs($this->userWithRole(3))->postJson("/api/tickets/{$codes[1]}/refund")->assertForbidden();
+        $this->actingAs($this->userWithRole(2))->postJson("/api/tickets/{$codes[1]}/refund")->assertForbidden();
     }
 
     public function test_stats_count_correctly(): void

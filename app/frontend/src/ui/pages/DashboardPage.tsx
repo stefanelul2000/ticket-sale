@@ -13,7 +13,7 @@ import { Meter } from '../components/ui/Stat';
 import { EmptyState, Loading, PageHeader } from '../components/ui/Misc';
 import { EventPicker } from '../components/EventPicker';
 import { PhaseBadge } from '../components/EventBits';
-import { IconCalendar, IconChart, IconPin, IconScan, IconTicket } from '../components/Icons';
+import { IconCalendar, IconChart, IconList, IconPin, IconScan, IconTicket } from '../components/Icons';
 
 export function DashboardPage() {
   const t = useT();
@@ -149,6 +149,11 @@ function EventHero({ event, role }: { event: EventSummary; role: number }) {
           {role >= 4 && (
             <Link to={`/events/${event.id}`} className="inline-flex h-11 items-center gap-2 rounded border border-linestrong bg-surface px-4 text-sm font-semibold hover:bg-surface2">
               <IconCalendar size={18} /> {t('dash.manage')}
+            </Link>
+          )}
+          {role >= 2 && role !== 3 && (
+            <Link to="/tickets" className="inline-flex h-11 items-center gap-2 rounded border border-linestrong bg-surface px-4 text-sm font-semibold hover:bg-surface2">
+              <IconList size={18} /> {t('dash.allTickets')}
             </Link>
           )}
           <Link to={`/reports?event=${event.id}`} className="inline-flex h-11 items-center gap-2 rounded border border-linestrong bg-surface px-4 text-sm font-semibold hover:bg-surface2">

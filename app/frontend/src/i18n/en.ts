@@ -550,6 +550,13 @@ export const en: Record<keyof typeof ro, string> = {
   'mail.testTo': 'Send a test email to',
   'mail.test': 'Send test',
   'mail.testSent': 'Test email sent to {to}.',
+  'nav.tickets': 'Tickets',
+  'tickets.pageSubtitle': 'All tickets of the selected event: who holds them, who handed them out and who came in.',
+  'guest.refund': 'Refund',
+  'guest.refundConfirm': 'Refund ticket {code} ({name})? It becomes free again.',
+  'guest.refundConfirmCheckedIn': 'Ticket {code} ({name}) was already used at the door. Refund it anyway? The entry is removed and the ticket becomes free again.',
+  'guest.refunded': 'Ticket {code} refunded.',
+  'dash.allTickets': 'All tickets',
   'chart.showTable': 'Show as table',
   'chart.showChart': 'Show as chart',
 };

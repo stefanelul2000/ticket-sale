@@ -549,6 +549,13 @@ export const ro = {
   'mail.testTo': 'Trimite un email de test la',
   'mail.test': 'Trimite testul',
   'mail.testSent': 'Email de test trimis la {to}.',
+  'nav.tickets': 'Bilete',
+  'tickets.pageSubtitle': 'Toate biletele evenimentului ales: cine le are, cine le-a dat și cine a intrat.',
+  'guest.refund': 'Anulează (refund)',
+  'guest.refundConfirm': 'Anulezi biletul {code} ({name})? Devine din nou liber.',
+  'guest.refundConfirmCheckedIn': 'Biletul {code} ({name}) a fost deja folosit la intrare. Îl anulezi oricum? Intrarea se șterge și biletul devine din nou liber.',
+  'guest.refunded': 'Biletul {code} a fost anulat.',
+  'dash.allTickets': 'Toate biletele',
   'chart.showTable': 'Vezi ca tabel',
   'chart.showChart': 'Vezi ca grafic',
 };

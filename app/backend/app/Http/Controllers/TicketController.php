@@ -343,6 +343,10 @@ class TicketController extends Controller
         return response()->json($this->present($ticket));
     }
 
+    /**
+     * Refund / cancel an assigned ticket (managers and admins): the ticket becomes free again.
+     * Also works after check-in (e.g. removing a test ticket); the check-in is undone.
+     */
     public function refund(Request $request, string $ticketCode)
     {
         $ticket = $this->findTicketByCode($ticketCode);
@@ -354,19 +358,18 @@ class TicketController extends Controller
             return response()->json(['message' => __('Ticket is not assigned yet.')], 409);
         }
 
-        if ($ticket->checkin) {
-            return response()->json(['message' => __('Ticket was already used for check-in and cannot be released.')], 409);
-        }
-
-        $previousName = $ticket->name;
+        $previous = $ticket->only(['name', 'checkin', 'checked_in_at', 'request_id', 'is_walk_in']);
         $updated = Ticket::whereKey($ticket->id)
             ->whereNotNull('sold_at')
-            ->where('checkin', false)
             ->update([
                 'user_id' => null,
                 'name' => null,
                 'guest_category' => null,
                 'sold_at' => null,
+                'checkin' => false,
+                'checked_in_at' => null,
+                'checked_in_by' => null,
+                'is_walk_in' => false,
                 'request_id' => null,
                 'updated_at' => Carbon::now(),
             ]);
@@ -375,13 +378,17 @@ class TicketController extends Controller
             return response()->json(['message' => __('Ticket changed meanwhile; reload and try again.')], 409);
         }
 
-        $this->recordActivity($request, 'refund', $ticket->ticket_code, 'Released', true, $previousName);
+        $status = $previous['checkin'] ? 'Refunded (check-in undone)' : 'Released';
+        $this->recordActivity($request, 'refund', $ticket->ticket_code, $status, true, $previous['name']);
         $this->logAdminAction($request->user()?->id, 'ticket.refund', [
             'ticket_code' => $ticket->ticket_code,
-            'name' => $previousName,
+            'name' => $previous['name'],
+            'was_checked_in' => (bool) $previous['checkin'],
+            'checked_in_at' => $previous['checked_in_at']?->toIso8601String(),
+            'request_id' => $previous['request_id'],
         ]);
 
-        return response()->json(['refunded' => true]);
+        return response()->json(['refunded' => true, 'was_checked_in' => (bool) $previous['checkin']]);
     }
 
     public function checkin(Request $request, string $ticketCode)
