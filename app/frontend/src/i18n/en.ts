@@ -577,6 +577,7 @@ export const en: Record<keyof typeof ro, string> = {
   'guest.refundNotify': 'Email the person that the e-ticket was cancelled',
   'guest.refundNoMail': 'E-ticket: email is not configured, so the person won’t be notified automatically.',
   'guest.refundPaper': 'Printed invitation: we have no email, so nobody is notified.',
+  'mail.notifyFailed': 'The notification email could NOT be sent (see Settings → Email). Let the person know another way.',
   'guest.refundedNotified': 'Ticket {code} refunded; the person was notified by email.',
   'reqs.cancelTitle': 'Cancel the request from {email}?',
   'reqs.cancelNotify': 'Email {email} that the e-tickets were cancelled',

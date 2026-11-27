@@ -576,6 +576,7 @@ export const ro = {
   'guest.refundNotify': 'Anunță persoana pe email că e-biletul a fost anulat',
   'guest.refundNoMail': 'E-bilet: emailul nu este configurat, așa că persoana nu va fi anunțată automat.',
   'guest.refundPaper': 'Invitație tipărită: nu avem un email, deci nimeni nu primește notificare.',
+  'mail.notifyFailed': 'Emailul de anunțare NU a putut fi trimis (vezi Setări → Email). Anunță persoana altfel.',
   'guest.refundedNotified': 'Biletul {code} a fost anulat; persoana a fost anunțată pe email.',
   'reqs.cancelTitle': 'Anulezi cererea de la {email}?',
   'reqs.cancelNotify': 'Trimite un email la {email} că e-biletele au fost anulate',

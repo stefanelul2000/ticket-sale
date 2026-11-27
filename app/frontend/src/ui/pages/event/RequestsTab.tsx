@@ -111,6 +111,7 @@ export function RequestsTab({ event, onChanged }: { event: EventT; onChanged: ()
     try {
       const res = await api.cancelRequest(r.id, withEmail);
       toast(res.notified ? t('reqs.cancelledNotified', { n: res.released }) : t('reqs.cancelled', { n: res.released }), 'ok');
+      if (withEmail && !res.notified) toast(t('mail.notifyFailed'), 'warn');
       setCancelling(null);
       onChanged();
       await load();
@@ -404,6 +405,7 @@ function RejectModal({ r, mailConfigured, onClose, onDone }: { r: TicketRequestT
     try {
       const res = await api.rejectRequest(r.id, { note: note.trim() || null, notify });
       toast(res.notified ? t('reqs.rejectedNotified') : t('reqs.rejected'), 'ok');
+      if (notify && mailConfigured && !res.notified) toast(t('mail.notifyFailed'), 'warn');
       onDone();
     } catch (err) {
       toast(errorMessage(err, t('common.error')), 'danger');

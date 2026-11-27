@@ -77,6 +77,7 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
     try {
       const res = await api.refund(row.ticket_code, withEmail);
       toast(res.notified ? t('guest.refundedNotified', { code: row.ticket_code }) : t('guest.refunded', { code: row.ticket_code }), 'ok');
+      if (withEmail && !res.notified) toast(t('mail.notifyFailed'), 'warn');
       setRefunding(null);
       load();
       onChanged();
