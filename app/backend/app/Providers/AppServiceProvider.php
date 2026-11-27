@@ -36,13 +36,24 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Mail::extend('microsoft-graph', function (array $config) {
-            foreach (['tenant_id', 'client_id', 'client_secret', 'sender'] as $key) {
+            foreach (['tenant_id', 'client_id', 'sender'] as $key) {
                 if (empty($config[$key])) {
                     throw new \RuntimeException("Microsoft Graph mailer: missing {$key}");
                 }
             }
+            $useCert = ! empty($config['cert_path']) && ! empty($config['key_path']);
+            if (! $useCert && empty($config['client_secret'])) {
+                throw new \RuntimeException('Microsoft Graph mailer: configure a certificate (cert_path + key_path) or a client secret');
+            }
 
-            return new \App\Mail\MicrosoftGraphTransport($config['tenant_id'], $config['client_id'], $config['client_secret'], $config['sender']);
+            return new \App\Mail\MicrosoftGraphTransport(
+                $config['tenant_id'],
+                $config['client_id'],
+                $config['client_secret'] ?? null,
+                $config['sender'],
+                $useCert ? $config['cert_path'] : null,
+                $useCert ? $config['key_path'] : null,
+            );
         });
 
         // Public ticket requests: few per person, keyed by IP (anti-spam with a honeypot).

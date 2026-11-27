@@ -54,6 +54,8 @@ services:
       MS_GRAPH_TENANT_ID: ${MS_GRAPH_TENANT_ID:-}
       MS_GRAPH_CLIENT_ID: ${MS_GRAPH_CLIENT_ID:-}
       MS_GRAPH_CLIENT_SECRET: ${MS_GRAPH_CLIENT_SECRET:-}
+      MS_GRAPH_CERT_PATH: ${MS_GRAPH_CERT_PATH:-}
+      MS_GRAPH_KEY_PATH: ${MS_GRAPH_KEY_PATH:-}
       MS_GRAPH_SENDER: ${MS_GRAPH_SENDER:-}
       # Leave empty: the SPA calls /api on its own origin.
       VITE_API_URL: ""

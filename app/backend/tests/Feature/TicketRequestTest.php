@@ -220,4 +220,60 @@ class TicketRequestTest extends TestCase
         $this->assertStringNotContainsString('super-secret', $res->getContent());
         $this->assertStringContainsString('invalid_client', $req->fresh()->send_error);
     }
+
+    public function test_graph_transport_authenticates_with_a_certificate(): void
+    {
+        // Throwaway key + self-signed certificate, like the one used in production.
+        $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+        $cert = openssl_csr_sign(openssl_csr_new(['commonName' => 'test-eticket'], $key), null, $key, 30);
+        openssl_x509_export($cert, $certPem);
+        openssl_pkey_export($key, $keyPem);
+        $dir = sys_get_temp_dir().'/msgraph-'.bin2hex(random_bytes(4));
+        mkdir($dir);
+        file_put_contents("{$dir}/c.crt", $certPem);
+        file_put_contents("{$dir}/c.key", $keyPem);
+
+        config([
+            'mail.default' => 'microsoft-graph',
+            'mail.mailers.microsoft-graph' => [
+                'transport' => 'microsoft-graph', 'tenant_id' => 'tenant-9', 'client_id' => 'client-9',
+                'client_secret' => null, 'cert_path' => "{$dir}/c.crt", 'key_path' => "{$dir}/c.key", 'sender' => 'office@example.org',
+            ],
+        ]);
+        Http::fake([
+            'login.microsoftonline.com/*' => Http::response(['access_token' => 'tok-cert', 'expires_in' => 3600]),
+            'graph.microsoft.com/*' => Http::response(null, 202),
+        ]);
+
+        $this->ask(['attendees' => ['Maria Popescu']])->assertCreated();
+        $req = TicketRequest::first();
+        $manager = $this->userWithRole(4);
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => ['Maria Popescu']])->assertOk();
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/send")->assertOk();
+
+        $b64d = fn (string $v) => base64_decode(strtr($v, '-_', '+/').str_repeat('=', (4 - strlen($v) % 4) % 4));
+        Http::assertSent(function ($r) use ($b64d, $certPem) {
+            if (! str_contains($r->url(), 'login.microsoftonline.com/tenant-9/oauth2/v2.0/token')) {
+                return false;
+            }
+            $this->assertArrayNotHasKey('client_secret', $r->data());
+            $this->assertSame('urn:ietf:params:oauth:client-assertion-type:jwt-bearer', $r['client_assertion_type']);
+            [$h, $c, $sig] = explode('.', $r['client_assertion']);
+            $header = json_decode($b64d($h), true);
+            $claims = json_decode($b64d($c), true);
+            preg_match('/-----BEGIN CERTIFICATE-----(.+?)-----END CERTIFICATE-----/s', $certPem, $m);
+            $der = base64_decode(preg_replace('/\s+/', '', $m[1]));
+
+            $this->assertSame('RS256', $header['alg']);
+            $this->assertSame(hash('sha256', $der, true), $b64d($header['x5t#S256']));
+            $this->assertSame('client-9', $claims['iss']);
+            $this->assertSame('client-9', $claims['sub']);
+            $this->assertStringEndsWith('/tenant-9/oauth2/v2.0/token', $claims['aud']);
+            $this->assertGreaterThan(time(), $claims['exp']);
+            $this->assertSame(1, openssl_verify("{$h}.{$c}", $b64d($sig), openssl_pkey_get_public($certPem), OPENSSL_ALGO_SHA256));
+
+            return true;
+        });
+        Http::assertSent(fn ($r) => str_contains($r->url(), 'graph.microsoft.com') && $r->hasHeader('Authorization', 'Bearer tok-cert'));
+    }
 }

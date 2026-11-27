@@ -43,6 +43,9 @@ return [
             'tenant_id' => env('MS_GRAPH_TENANT_ID'),
             'client_id' => env('MS_GRAPH_CLIENT_ID'),
             'client_secret' => env('MS_GRAPH_CLIENT_SECRET'),
+            // Certificate credentials (preferred; required when the tenant blocks secrets)
+            'cert_path' => env('MS_GRAPH_CERT_PATH'),
+            'key_path' => env('MS_GRAPH_KEY_PATH'),
             'sender' => env('MS_GRAPH_SENDER', env('MAIL_FROM_ADDRESS')),
         ],
 
