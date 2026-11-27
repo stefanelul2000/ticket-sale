@@ -90,6 +90,22 @@ export const api = {
   publicEvents: () => client.get('/public/events').then((r) => r.data),
   publicEvent: (slug: string) => client.get(`/public/events/${encodeURIComponent(slug)}`).then((r) => r.data),
   publicTicket: (ticketCode: string) => client.get(`/public/tickets/${code(ticketCode)}`).then((r) => r.data),
+  publicRequest: (slug: string, payload: Record<string, unknown>) =>
+    client.post(`/public/events/${encodeURIComponent(slug)}/requests`, payload).then((r) => r.data),
+
+  // e-ticket requests (staff)
+  eventRequests: (eventId: number, status = 'pending') => client.get(`/events/${eventId}/requests`, { params: { status } }).then((r) => r.data),
+  approveRequest: (id: number, payload: { attendees: string[]; guest_category?: string | null }) =>
+    client.post(`/requests/${id}/approve`, payload).then((r) => r.data),
+  sendRequest: (id: number, designs: Blob[] = []) => {
+    const form = new FormData();
+    designs.forEach((b, i) => form.append('designs[]', b, `e-bilet-${i + 1}.${b.type === 'image/png' ? 'png' : 'jpg'}`));
+    return client.post(`/requests/${id}/send`, form).then((r) => r.data);
+  },
+  rejectRequest: (id: number, payload: { note?: string | null; notify: boolean }) => client.post(`/requests/${id}/reject`, payload).then((r) => r.data),
+  cancelRequest: (id: number) => client.post(`/requests/${id}/cancel`).then((r) => r.data),
+  mailStatus: () => client.get('/settings/mail').then((r) => r.data),
+  testMail: (to: string) => client.post('/settings/mail/test', { to }).then((r) => r.data),
 
   // settings
   settings: () => client.get('/settings').then((r) => r.data),

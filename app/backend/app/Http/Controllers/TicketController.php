@@ -20,7 +20,7 @@ class TicketController extends Controller
     {
         $request->validate([
             'event_id' => ['nullable', 'integer'],
-            'status' => ['nullable', 'in:assigned,unassigned,checked_in,not_checked_in,walk_in'],
+            'status' => ['nullable', 'in:assigned,unassigned,checked_in,not_checked_in,walk_in,eticket'],
             'category' => ['nullable', 'string', 'max:32'],
             'search' => ['nullable', 'string', 'max:100'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:2000'],
@@ -39,6 +39,7 @@ class TicketController extends Controller
                     'checked_in' => $q->where('checkin', true),
                     'not_checked_in' => $q->whereNotNull('sold_at')->where('checkin', false),
                     'walk_in' => $q->where('is_walk_in', true),
+                    'eticket' => $q->whereNotNull('request_id'),
                 };
             })
             ->when($request->filled('search'), function ($q) use ($request) {
@@ -366,6 +367,7 @@ class TicketController extends Controller
                 'name' => null,
                 'guest_category' => null,
                 'sold_at' => null,
+                'request_id' => null,
                 'updated_at' => Carbon::now(),
             ]);
 
@@ -539,6 +541,7 @@ class TicketController extends Controller
             ->selectRaw('sum(case when sold_at is not null then 1 else 0 end) as sold')
             ->selectRaw('sum(case when checkin = 1 then 1 else 0 end) as checked_in')
             ->selectRaw('sum(case when is_walk_in = 1 then 1 else 0 end) as walk_ins')
+            ->selectRaw('sum(case when request_id is not null then 1 else 0 end) as etickets')
             ->first();
 
         $total = (int) ($row->total ?? 0);
@@ -550,6 +553,7 @@ class TicketController extends Controller
             'unsold' => $total - $sold,
             'checked_in' => (int) ($row->checked_in ?? 0),
             'walk_ins' => (int) ($row->walk_ins ?? 0),
+            'etickets' => (int) ($row->etickets ?? 0),
         ]);
     }
 
@@ -596,6 +600,7 @@ class TicketController extends Controller
             'checked_in_at' => $ticket->checked_in_at,
             'checked_in_by' => $ticket->checkedInBy?->name,
             'is_walk_in' => (bool) $ticket->is_walk_in,
+            'is_eticket' => $ticket->request_id !== null,
         ];
     }
 

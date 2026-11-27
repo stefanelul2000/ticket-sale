@@ -37,6 +37,16 @@ return [
 
     'mailers' => [
 
+        // Microsoft 365 via Graph API + Entra ID app (client credentials, Mail.Send).
+        'microsoft-graph' => [
+            'transport' => 'microsoft-graph',
+            'tenant_id' => env('MS_GRAPH_TENANT_ID'),
+            'client_id' => env('MS_GRAPH_CLIENT_ID'),
+            'client_secret' => env('MS_GRAPH_CLIENT_SECRET'),
+            'sender' => env('MS_GRAPH_SENDER', env('MAIL_FROM_ADDRESS')),
+        ],
+
+
         'smtp' => [
             'transport' => 'smtp',
             'scheme' => env('MAIL_SCHEME'),

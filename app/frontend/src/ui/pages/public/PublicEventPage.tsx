@@ -19,12 +19,15 @@ export type PublicEvent = {
   is_public?: boolean;
   donation_url?: string | null;
   photos_url?: string | null;
+  requests_open?: boolean;
+  requests_enabled?: boolean;
+  request_max?: number;
 };
 
 /** Only http(s) links are rendered (the API validates too). */
 const safeHref = (url?: string | null) => (url && /^https?:\/\//i.test(url) ? url : null);
 
-export function EventCard({ event, top }: { event: PublicEvent; top?: ReactNode }) {
+export function EventCard({ event, top, showRequest = true }: { event: PublicEvent; top?: ReactNode; showRequest?: boolean }) {
   const t = useT();
   const donate = safeHref(event.donation_url);
   const photos = safeHref(event.photos_url);
@@ -52,6 +55,18 @@ export function EventCard({ event, top }: { event: PublicEvent; top?: ReactNode 
       </div>
       <div className="space-y-6 px-6 py-6 sm:px-8">
         {event.description && <p className="whitespace-pre-line leading-relaxed text-ink">{event.description}</p>}
+        {showRequest && event.requests_open && (
+          <Link
+            to={`/e/${event.slug}/cerere`}
+            className="flex items-center justify-between gap-4 rounded-xl border-2 border-sky bg-accenttint p-4 transition-colors hover:bg-surface2"
+          >
+            <span>
+              <span className="block font-display text-lg font-bold text-ink">{t('req.cta')}</span>
+              <span className="block text-sm text-soft">{t('req.ctaHint')}</span>
+            </span>
+            <span className="text-2xl text-accent" aria-hidden>→</span>
+          </Link>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
           {donate && (
             <a href={donate} target="_blank" rel="noopener noreferrer" className="group flex items-center gap-4 rounded-xl bg-accent p-4 text-onaccent transition-colors hover:bg-accentstrong">

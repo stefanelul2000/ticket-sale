@@ -17,9 +17,9 @@ import { CategorySelect } from '../../components/EventBits';
 import { IconDownload, IconSearch } from '../../components/Icons';
 import { EditGuestModal } from '../AssignPage';
 
-type Status = '' | 'assigned' | 'unassigned' | 'checked_in' | 'not_checked_in' | 'walk_in';
+type Status = '' | 'assigned' | 'unassigned' | 'checked_in' | 'not_checked_in' | 'walk_in' | 'eticket';
 type Sort = 'number' | 'name' | 'assigned' | 'checked_in';
-type Counts = { total: number; sold: number; unsold: number; checked_in: number; walk_ins: number };
+type Counts = { total: number; sold: number; unsold: number; checked_in: number; walk_ins: number; etickets?: number };
 
 /** Every ticket of the event: who holds it, who handed it out (and when), who came in. */
 export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () => void }) {
@@ -122,6 +122,7 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
     { value: 'checked_in', label: t('filter.checked_in'), n: counts?.checked_in },
     { value: 'not_checked_in', label: t('filter.not_checked_in'), n: counts ? Math.max(0, counts.sold - counts.checked_in) : undefined },
     { value: 'walk_in', label: t('filter.walk_in'), n: counts?.walk_ins },
+    ...(counts?.etickets ? [{ value: 'eticket' as Status, label: t('filter.eticket'), n: counts.etickets }] : []),
   ];
 
   return (
@@ -216,7 +217,10 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
                     <tr key={r.id} className="border-t border-line align-top">
                       <td className="tabular px-4 py-3 text-soft">{r.ticket_number}</td>
                       <td className="px-4 py-3">
-                        <div className={clsx('font-semibold', !r.name && 'font-normal text-muted')}>{r.name || '—'}</div>
+                        <div className={clsx('font-semibold', !r.name && 'font-normal text-muted')}>
+                          {r.name || '—'}
+                          {r.request_id && <Badge tone="accent" className="ml-2 align-middle">{t('tickets.eticketBadge')}</Badge>}
+                        </div>
                         <div className="text-xs text-soft">
                           {[r.sold_at && r.guest_category ? t(categoryKey(r.guest_category)) : null, r.ticket_type?.name].filter(Boolean).join(' · ')}
                         </div>

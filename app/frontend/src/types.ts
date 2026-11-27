@@ -52,6 +52,15 @@ export type EventT = {
   donation_url?: string | null;
   photos_url?: string | null;
   print_template?: PrintTemplate | null;
+  requests_enabled?: boolean;
+  eticket_from?: number | null;
+  eticket_to?: number | null;
+  request_max?: number | null;
+  eticket_message?: string | null;
+  requests_pending?: number;
+  tickets_eticket?: number;
+  request_link?: string;
+  etickets_open?: number;
   ticket_types_count?: number;
   tickets_generated?: number;
   tickets_sold?: number;
@@ -89,6 +98,7 @@ export type TicketRow = {
   checkin: boolean;
   checked_in_at?: string | null;
   is_walk_in?: boolean;
+  request_id?: number | null;
   seller?: { id: number; name: string } | null;
   checked_in_by?: { id: number; name: string } | null;
   ticket_type?: { id: number; name: string } | null;
@@ -136,4 +146,24 @@ export type UserT = {
   active: boolean;
   last_login_at?: string | null;
   created_at?: string;
+};
+
+export type TicketRequestT = {
+  id: number;
+  event_id: number;
+  email: string;
+  phone?: string | null;
+  attendees: string[];
+  quantity: number;
+  message?: string | null;
+  status: 'pending' | 'approved' | 'rejected' | 'cancelled';
+  locale: string;
+  decided_at?: string | null;
+  decision_note?: string | null;
+  sent_at?: string | null;
+  send_count: number;
+  send_error?: string | null;
+  created_at: string;
+  decider?: { id: number; name: string } | null;
+  tickets?: { id: number; ticket_code: string; ticket_number: number; name?: string | null; checkin: boolean }[];
 };

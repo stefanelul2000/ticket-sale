@@ -23,6 +23,7 @@ class Ticket extends Model
         'checked_in_at',
         'checked_in_by',
         'is_walk_in',
+        'request_id',
     ];
 
     protected $casts = [
@@ -40,6 +41,11 @@ class Ticket extends Model
     public function checkedInBy()
     {
         return $this->belongsTo(User::class, 'checked_in_by');
+    }
+
+    public function request()
+    {
+        return $this->belongsTo(TicketRequest::class, 'request_id');
     }
 
     public function event()

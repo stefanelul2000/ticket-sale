@@ -8,6 +8,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\SettingsController;
 use App\Http\Controllers\SetupController;
 use App\Http\Controllers\TicketActivityController;
+use App\Http\Controllers\TicketRequestController;
 use App\Http\Controllers\TicketController;
 use App\Http\Controllers\TicketTypeController;
 use App\Http\Controllers\UserController;
@@ -29,6 +30,9 @@ Route::middleware('throttle:public')
     Route::get('/events', [PublicController::class, 'events']);
     Route::get('/events/{slug}', [PublicController::class, 'event'])->where('slug', '[a-z0-9-]{1,190}');
     Route::get('/tickets/{code}', [PublicController::class, 'ticket'])->where('code', '[A-Za-z0-9_-]{1,32}');
+    Route::post('/events/{slug}/requests', [TicketRequestController::class, 'store'])
+        ->where('slug', '[a-z0-9-]{1,190}')
+        ->middleware('throttle:ticket-requests');
 });
 
 // First-run setup (self-locking once an admin exists).
@@ -57,6 +61,8 @@ Route::middleware(['auth:sanctum', 'active', 'impersonate'])->group(function () 
 
         Route::get('/settings', [SettingsController::class, 'show']);
         Route::put('/settings', [SettingsController::class, 'update']);
+        Route::get('/settings/mail', [SettingsController::class, 'mailStatus']);
+        Route::post('/settings/mail/test', [SettingsController::class, 'testMail'])->middleware('throttle:5,1');
         Route::post('/setup/migrate', [SetupController::class, 'migrate']);
         Route::delete('/ticket-activity', [TicketActivityController::class, 'destroy']);
     });
@@ -74,6 +80,11 @@ Route::middleware(['auth:sanctum', 'active', 'impersonate'])->group(function () 
         Route::post('/events/{eventId}/template', [PrintTemplateController::class, 'upload'])->whereNumber('eventId');
         Route::put('/events/{eventId}/template', [PrintTemplateController::class, 'update'])->whereNumber('eventId');
         Route::delete('/events/{eventId}/template', [PrintTemplateController::class, 'destroy'])->whereNumber('eventId');
+        Route::get('/events/{eventId}/requests', [TicketRequestController::class, 'index'])->whereNumber('eventId');
+        Route::post('/requests/{requestId}/approve', [TicketRequestController::class, 'approve'])->whereNumber('requestId');
+        Route::post('/requests/{requestId}/send', [TicketRequestController::class, 'send'])->whereNumber('requestId');
+        Route::post('/requests/{requestId}/reject', [TicketRequestController::class, 'reject'])->whereNumber('requestId');
+        Route::post('/requests/{requestId}/cancel', [TicketRequestController::class, 'cancel'])->whereNumber('requestId');
 
         Route::get('/ticket-types', [TicketTypeController::class, 'index']);
         Route::post('/ticket-types', [TicketTypeController::class, 'store']);

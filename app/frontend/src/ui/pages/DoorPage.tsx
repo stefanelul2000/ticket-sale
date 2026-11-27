@@ -265,7 +265,7 @@ export function DoorPage() {
                       <div className="truncate font-semibold">{h.title}</div>
                       <div className="truncate text-xs text-soft">{h.ticket?.name || h.code}</div>
                     </div>
-                    <span className="tabular text-xs text-soft">{new Date(h.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    <span className="tabular text-xs text-soft">{fmtTime(new Date(h.at).toISOString())}</span>
                   </li>
                 ))}
               </ul>

@@ -17,7 +17,11 @@ return [
     'max' => [
         'array' => 'Câmpul :attribute poate avea cel mult :max elemente.',
         'file' => 'Fișierul :attribute poate avea cel mult :max kilobytes.',
-        'numeric' => 'Câmpul :attribute poate fi cel mult :max.',
+        'not_regex' => 'Formatul câmpului :attribute nu este valid.',
+    'gte' => [
+        'numeric' => 'Câmpul :attribute trebuie să fie cel puțin :value.',
+    ],
+    'numeric' => 'Câmpul :attribute poate fi cel mult :max.',
         'string' => 'Câmpul :attribute poate avea cel mult :max caractere.',
     ],
     'min' => [
@@ -64,5 +68,14 @@ return [
         'entries' => 'listă invitați',
         'sales_end' => 'sfârșit distribuire',
         'slug' => 'adresă scurtă',
+        'phone' => 'telefon',
+        'attendees' => 'invitați',
+        'attendees.*' => 'numele invitatului',
+        'message' => 'mesaj',
+        'consent' => 'acordul',
+        'eticket_from' => 'primul număr pentru e-bilete',
+        'eticket_to' => 'ultimul număr pentru e-bilete',
+        'request_max' => 'bilete pe cerere',
+        'request_notify_email' => 'email pentru notificări',
     ],
 ];

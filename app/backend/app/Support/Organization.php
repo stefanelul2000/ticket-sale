@@ -19,6 +19,8 @@ final class Organization
             'donation_url' => 'https://atelier-sacelean.ro/donate',
             // Base URL printed in invitation QR codes (https://host/t/CODE).
             'public_url' => rtrim((string) config('app.url'), '/'),
+            // Who gets an email when someone requests an e-ticket (empty = nobody).
+            'request_notify_email' => null,
         ];
     }
 

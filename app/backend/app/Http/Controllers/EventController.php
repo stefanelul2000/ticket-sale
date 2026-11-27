@@ -37,8 +37,12 @@ class EventController extends Controller
         $event = $this->withCounts(Event::query())->findOrFail($eventId);
         $event->setRelation('ticketTypes', $event->ticketTypes()->orderBy('sort')->orderBy('id')->get());
 
+        $public = Organization::get()['public_url'];
+
         return response()->json($event->toArray() + [
-            'public_link' => Organization::get()['public_url'].'/e/'.$event->slug,
+            'public_link' => $public.'/e/'.$event->slug,
+            'request_link' => $public.'/e/'.$event->slug.'/cerere',
+            'etickets_open' => $event->eticketsOpen(),
         ]);
     }
 
@@ -168,6 +172,8 @@ class EventController extends Controller
             'tickets as tickets_sold' => fn ($q) => $q->whereNotNull('sold_at'),
             'tickets as tickets_checked_in' => fn ($q) => $q->where('checkin', true),
             'tickets as tickets_walk_in' => fn ($q) => $q->where('is_walk_in', true),
+            'tickets as tickets_eticket' => fn ($q) => $q->whereNotNull('request_id'),
+            'ticketRequests as requests_pending' => fn ($q) => $q->where('status', 'pending'),
         ]);
     }
 
@@ -208,6 +214,11 @@ class EventController extends Controller
             'capacity' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'donation_url' => Organization::URL_RULE,
             'photos_url' => Organization::URL_RULE,
+            'requests_enabled' => ['boolean'],
+            'eticket_from' => ['nullable', 'integer', 'min:1'],
+            'eticket_to' => ['nullable', 'integer', 'min:1', 'gte:eticket_from'],
+            'request_max' => ['nullable', 'integer', 'min:1', 'max:10'],
+            'eticket_message' => ['nullable', 'string', 'max:1000'],
         ]);
     }
 }

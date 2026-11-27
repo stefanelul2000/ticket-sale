@@ -96,6 +96,11 @@ function EventHero({ event, role }: { event: EventSummary; role: number }) {
             <div className="mb-2 flex flex-wrap gap-2">
               <PhaseBadge startsAt={event.starts_at} endsAt={event.ends_at} />
               {event.is_public && <Badge tone="accent">{t('event.publicPage')}</Badge>}
+              {role >= 4 && (event.requests_pending ?? 0) > 0 && (
+                <Link to={`/events/${event.id}?tab=requests`}>
+                  <Badge tone="warn">{t('dash.pendingRequests', { n: event.requests_pending ?? 0 })}</Badge>
+                </Link>
+              )}
             </div>
             <h2 className="text-2xl font-bold sm:text-3xl">{event.name}</h2>
             <div className="mt-2 flex flex-wrap gap-x-5 gap-y-1 text-sm text-soft">

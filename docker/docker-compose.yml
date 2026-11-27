@@ -47,6 +47,14 @@ services:
       QUEUE_CONNECTION: sync
       SANCTUM_STATEFUL_DOMAINS: ${SANCTUM_STATEFUL_DOMAINS:-localhost,localhost:8080,127.0.0.1:8080}
       TRUSTED_PROXIES: ${TRUSTED_PROXIES:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,127.0.0.1}
+      # Email (e-tickets). "log" = not sending. Microsoft 365: MAIL_MAILER=microsoft-graph + MS_GRAPH_*.
+      MAIL_MAILER: ${MAIL_MAILER:-log}
+      MAIL_FROM_ADDRESS: ${MAIL_FROM_ADDRESS:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-Asociatia Atelier Sacelean}
+      MS_GRAPH_TENANT_ID: ${MS_GRAPH_TENANT_ID:-}
+      MS_GRAPH_CLIENT_ID: ${MS_GRAPH_CLIENT_ID:-}
+      MS_GRAPH_CLIENT_SECRET: ${MS_GRAPH_CLIENT_SECRET:-}
+      MS_GRAPH_SENDER: ${MS_GRAPH_SENDER:-}
       # Leave empty: the SPA calls /api on its own origin.
       VITE_API_URL: ""
     depends_on:

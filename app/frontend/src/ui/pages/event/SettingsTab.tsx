@@ -97,6 +97,22 @@ export function SettingsTab({ event, onChanged }: { event: EventT; onChanged: ()
             </div>
           )}
         </Card>
+        {event.requests_enabled && event.request_link && (
+          <Card title={t('eticket.linkTitle')}>
+            <p className="text-sm text-soft">{t('eticket.linkHint')}</p>
+            <div className="mt-3 flex items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded bg-surface2 px-2 py-1.5 text-xs">{event.request_link}</code>
+              <Button
+                size="sm"
+                variant="secondary"
+                aria-label={t('common.copy')}
+                onClick={() => navigator.clipboard.writeText(event.request_link!).then(() => toast(t('common.copied'), 'ok'), () => window.prompt(t('eticket.linkTitle'), event.request_link))}
+              >
+                <IconCopy size={16} />
+              </Button>
+            </div>
+          </Card>
+        )}
         <Card title={t('event.duplicate')}>
           <p className="text-sm text-soft">{t('event.duplicateHint')}</p>
           <Button className="mt-3" variant="secondary" onClick={duplicate} loading={busy}>{t('event.duplicate')}</Button>

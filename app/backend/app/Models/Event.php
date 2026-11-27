@@ -52,6 +52,11 @@ class Event extends Model
         'donation_url',
         'photos_url',
         'print_template',
+        'requests_enabled',
+        'eticket_from',
+        'eticket_to',
+        'request_max',
+        'eticket_message',
         'branding',
         'seo',
     ];
@@ -60,6 +65,10 @@ class Event extends Model
         'is_online' => 'boolean',
         'is_public' => 'boolean',
         'print_template' => 'array',
+        'requests_enabled' => 'boolean',
+        'eticket_from' => 'integer',
+        'eticket_to' => 'integer',
+        'request_max' => 'integer',
         'starts_at' => 'datetime',
         'ends_at' => 'datetime',
         'branding' => 'array',
@@ -74,6 +83,30 @@ class Event extends Model
     public function tickets()
     {
         return $this->hasMany(Ticket::class);
+    }
+
+    public function ticketRequests()
+    {
+        return $this->hasMany(TicketRequest::class);
+    }
+
+    /** Unassigned tickets available for e-tickets (the reserved number range, if set). */
+    public function eticketPool()
+    {
+        return Ticket::where('event_id', $this->id)
+            ->whereNull('sold_at')
+            ->where('checkin', false)
+            ->when($this->eticket_from, fn ($q) => $q->where('ticket_number', '>=', $this->eticket_from))
+            ->when($this->eticket_to, fn ($q) => $q->where('ticket_number', '<=', $this->eticket_to));
+    }
+
+    /** Free e-tickets minus tickets already asked for in pending requests. */
+    public function eticketsOpen(): int
+    {
+        $free = $this->eticketPool()->count();
+        $pending = (int) $this->ticketRequests()->where('status', 'pending')->sum('quantity');
+
+        return max(0, $free - $pending);
     }
 
     /**
@@ -92,6 +125,9 @@ class Event extends Model
             'is_public' => $this->is_public,
             'donation_url' => $this->donation_url ?: ($organization['donation_url'] ?? null),
             'photos_url' => $this->photos_url,
+            'requests_open' => (bool) $this->requests_enabled && $this->eticketsOpen() > 0,
+            'requests_enabled' => (bool) $this->requests_enabled,
+            'request_max' => (int) ($this->request_max ?: 4),
         ];
     }
 }

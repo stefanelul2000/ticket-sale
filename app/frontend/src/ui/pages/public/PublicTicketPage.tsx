@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { ticketUrl } from '../../../lib/ticketCode';
+import { useSettings } from '../../../state/useSettings';
 import { useParams } from 'react-router-dom';
 import clsx from 'clsx';
 import { useT } from '../../../i18n';
@@ -14,6 +16,8 @@ export function PublicTicketPage() {
   const { code } = useParams();
   const [ticket, setTicket] = useState<PublicTicket | null>(null);
   const [missing, setMissing] = useState(false);
+  const [qr, setQr] = useState<string | null>(null);
+  const publicUrl = useSettings((s) => s.settings.public_url);
 
   useEffect(() => {
     if (!code) return;
@@ -23,6 +27,20 @@ export function PublicTicketPage() {
   useEffect(() => {
     if (ticket) document.title = `${ticket.event.name} · Atelier Săcelean`;
   }, [ticket]);
+
+  // The e-ticket: same QR as on the printed invitation, shown big for the door scanners.
+  useEffect(() => {
+    if (!ticket || ticket.status !== 'valid') return;
+    let alive = true;
+    import('qrcode').then(async (m) => {
+      const QR = (m as unknown as { default?: typeof import('qrcode') }).default ?? m;
+      const url = await QR.toDataURL(ticketUrl(publicUrl || window.location.origin, ticket.ticket_code), { errorCorrectionLevel: 'M', margin: 2, width: 560 });
+      if (alive) setQr(url);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [ticket, publicUrl]);
 
   if (missing) return <PublicNotFound />;
   if (!ticket) return <Loading />;
@@ -44,7 +62,14 @@ export function PublicTicketPage() {
           </div>
         </div>
       </div>
-      <EventCard event={ticket.event} />
+      {qr && (
+        <div className="rounded-2xl border border-line bg-white p-5 text-center shadow-card">
+          <img src={qr} alt={`QR ${ticket.ticket_code}`} className="mx-auto w-full max-w-[300px]" style={{ imageRendering: 'pixelated' }} />
+          <p className="mt-2 font-mono text-lg tracking-wider text-[#24313a]">{ticket.ticket_code}</p>
+          <p className="mt-1 text-sm text-[#55656f]">{t('public.showAtDoor')}</p>
+        </div>
+      )}
+      <EventCard event={ticket.event} showRequest={false} />
     </div>
   );
 }

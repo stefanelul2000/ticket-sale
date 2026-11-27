@@ -15,6 +15,8 @@ export type EventSummary = {
   tickets_sold?: number;
   tickets_checked_in?: number;
   tickets_walk_in?: number;
+  tickets_eticket?: number;
+  requests_pending?: number;
 };
 
 const KEY = 'ts_event';

@@ -20,6 +20,7 @@ import { SettingsPage } from './ui/pages/SettingsPage';
 import { PublicEventPage, PublicNotFound } from './ui/pages/public/PublicEventPage';
 import { PublicEventsPage } from './ui/pages/public/PublicEventsPage';
 import { PublicTicketPage } from './ui/pages/public/PublicTicketPage';
+import { PublicRequestPage } from './ui/pages/public/PublicRequestPage';
 
 /** Shows the first-run wizard until an owner exists. */
 function SetupGate({ children }: { children: ReactNode }) {
@@ -55,6 +56,7 @@ export const router = createBrowserRouter([
     children: [
       { path: '/e', element: <PublicEventsPage /> },
       { path: '/e/:slug', element: <PublicEventPage /> },
+      { path: '/e/:slug/cerere', element: <PublicRequestPage /> },
       { path: '/t/:code', element: <PublicTicketPage /> },
     ],
   },
