@@ -1,5 +1,5 @@
 @component('emails.layout', ['org' => $org, 'message' => $message, 'title' => $event->name])
-<h1 style="margin:0 0 12px 0;font-size:20px;color:#0f204b;">{{ __('New ticket request') }} – {{ $event->name }}</h1>
+<h1 class="m-h1 d-head" style="margin:0 0 12px 0;font-size:20px;color:#0f204b;">{{ __('New ticket request') }} – {{ $event->name }}</h1>
 <p style="margin:0 0 6px 0;"><strong>{{ __('Guests') }}:</strong></p>
 <ul style="margin:0 0 10px 18px;padding:0;">
 @foreach ($req->guestList() as $g)
