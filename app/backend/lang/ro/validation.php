@@ -71,6 +71,8 @@ return [
         'phone' => 'telefon',
         'attendees' => 'invitați',
         'attendees.*' => 'numele invitatului',
+        'attendees.*.name' => 'numele invitatului',
+        'attendees.*.guest_category' => 'cine este invitatul',
         'message' => 'mesaj',
         'consent' => 'acordul',
         'eticket_from' => 'primul număr pentru e-bilete',
