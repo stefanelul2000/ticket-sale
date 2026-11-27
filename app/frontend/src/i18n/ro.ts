@@ -533,7 +533,7 @@ export const ro = {
   'eticket.from': 'De la numărul',
   'eticket.to': 'Până la numărul',
   'eticket.max': 'Bilete pe cerere',
-  'eticket.rangeHint': 'Invitațiile din acest interval sunt folosite ca e-bilete (de ex. 101–150). Pot fi tipărite și ele: același număr intră o singură dată. Gol = orice invitație liberă.',
+  'eticket.rangeHint': 'Invitațiile din acest interval sunt folosite ca e-bilete (de ex. 101–150). Pot fi tipărite și ele: același număr intră o singură dată. Obligatoriu: e-biletele se dau doar din acest interval, ca să nu folosească invitații deja tipărite pentru alții.',
   'eticket.message': 'Mesaj în emailul cu e-bilete (opțional)',
   'eticket.messageHint': 'De ex. ora la care se deschid ușile sau unde se parchează.',
   'eticket.linkTitle': 'Link pentru cereri',

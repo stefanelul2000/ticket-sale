@@ -108,8 +108,8 @@ export function EventForm({
         {v.requests_enabled && (
           <>
             <div className="grid gap-4 sm:grid-cols-3">
-              <Input label={t('eticket.from')} type="number" min={1} inputMode="numeric" value={v.eticket_from} onChange={(e) => set('eticket_from', e.target.value)} placeholder="101" />
-              <Input label={t('eticket.to')} type="number" min={1} inputMode="numeric" value={v.eticket_to} onChange={(e) => set('eticket_to', e.target.value)} placeholder="150" />
+              <Input label={<>{t('eticket.from')} <span className="text-danger">*</span></>} type="number" min={1} inputMode="numeric" required value={v.eticket_from} onChange={(e) => set('eticket_from', e.target.value)} />
+              <Input label={<>{t('eticket.to')} <span className="text-danger">*</span></>} type="number" inputMode="numeric" required min={v.eticket_from || 1} value={v.eticket_to} onChange={(e) => set('eticket_to', e.target.value)} />
               <Select label={t('eticket.max')} value={v.request_max} onChange={(e) => set('request_max', e.target.value)}>
                 {[1, 2, 3, 4].map((n) => (
                   <option key={n} value={n}>{n}</option>

@@ -215,8 +215,8 @@ class EventController extends Controller
             'donation_url' => Organization::URL_RULE,
             'photos_url' => Organization::URL_RULE,
             'requests_enabled' => ['boolean'],
-            'eticket_from' => ['nullable', 'integer', 'min:1'],
-            'eticket_to' => ['nullable', 'integer', 'min:1', 'gte:eticket_from'],
+            'eticket_from' => ['nullable', 'required_if_accepted:requests_enabled', 'integer', 'min:1'],
+            'eticket_to' => ['nullable', 'required_if_accepted:requests_enabled', 'integer', 'min:1', 'gte:eticket_from'],
             'request_max' => ['nullable', 'integer', 'min:1', 'max:10'],
             'eticket_message' => ['nullable', 'string', 'max:1000'],
         ]);

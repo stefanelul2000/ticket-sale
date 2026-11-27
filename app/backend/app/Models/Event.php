@@ -90,14 +90,22 @@ class Event extends Model
         return $this->hasMany(TicketRequest::class);
     }
 
-    /** Unassigned tickets available for e-tickets (the reserved number range, if set). */
+    /** E-tickets come only from an explicit number range (printed invitations must never be handed out by mistake). */
+    public function hasEticketRange(): bool
+    {
+        return $this->eticket_from !== null && $this->eticket_to !== null;
+    }
+
+    /** Unassigned tickets inside the reserved e-ticket range (empty when no range is set). */
     public function eticketPool()
     {
-        return Ticket::where('event_id', $this->id)
+        $q = Ticket::where('event_id', $this->id)
             ->whereNull('sold_at')
-            ->where('checkin', false)
-            ->when($this->eticket_from, fn ($q) => $q->where('ticket_number', '>=', $this->eticket_from))
-            ->when($this->eticket_to, fn ($q) => $q->where('ticket_number', '<=', $this->eticket_to));
+            ->where('checkin', false);
+
+        return $this->hasEticketRange()
+            ? $q->whereBetween('ticket_number', [$this->eticket_from, $this->eticket_to])
+            : $q->whereRaw('1 = 0');
     }
 
     /** Free e-tickets minus tickets already asked for in pending requests. */

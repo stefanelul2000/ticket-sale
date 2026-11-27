@@ -169,6 +169,9 @@ class TicketRequestController extends Controller
             }
 
             $event = Event::whereKey($req->event_id)->lockForUpdate()->firstOrFail();
+            if (! $event->hasEticketRange()) {
+                return response()->json(['message' => __('Set the e-ticket number range (e.g. 101–150) in the event settings first.')], 422);
+            }
             $free = $event->eticketPool()->orderBy('ticket_number')->limit(count($names))->lockForUpdate()->get();
             if ($free->count() < count($names)) {
                 return response()->json(['message' => __('Only :n e-tickets are still available.', ['n' => $free->count()])], 422);

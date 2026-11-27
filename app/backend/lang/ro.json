@@ -61,6 +61,7 @@
   "Review the request": "Vezi cererea",
   "You already have a request waiting for approval. We will email you soon.": "Ai deja o cerere în așteptare. Îți scriem în curând pe email.",
   "Only :n e-tickets are still available.": "Mai sunt disponibile doar :n e-bilete.",
+  "Set the e-ticket number range (e.g. 101–150) in the event settings first.": "Setează mai întâi intervalul de numere pentru e-bilete (de ex. 101–150) în setările evenimentului.",
   "All e-tickets have been reserved.": "Toate e-biletele au fost rezervate.",
   "This request was already handled.": "Cererea a fost deja procesată.",
   "You can approve at most :n tickets for this request.": "Poți aproba cel mult :n bilete pentru această cerere.",

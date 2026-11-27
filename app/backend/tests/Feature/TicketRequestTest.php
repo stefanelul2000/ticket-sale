@@ -328,4 +328,30 @@ class TicketRequestTest extends TestCase
         $this->actingAs($this->userWithRole(2))->postJson("/api/tickets/{$t->ticket_code}/checkin", ['event_id' => $this->event->id])
             ->assertOk()->assertJson(['ticket' => ['is_eticket' => true, 'ticket_number' => $t->ticket_number]]);
     }
+
+    public function test_etickets_only_come_from_an_explicit_number_range(): void
+    {
+        $owner = $this->userWithRole(4);
+
+        // Requests on => the range is mandatory.
+        $this->actingAs($owner)->withHeader('X-Locale', 'ro')
+            ->patchJson("/api/events/{$this->event->id}", ['name' => $this->event->name, 'requests_enabled' => true, 'eticket_from' => null, 'eticket_to' => null])
+            ->assertStatus(422)->assertJsonValidationErrors(['eticket_from', 'eticket_to']);
+
+        // A legacy event without a range never falls back to "any free ticket" (e.g. #2, already printed).
+        $this->event->update(['eticket_from' => null, 'eticket_to' => null]);
+        $this->assertSame(0, $this->event->fresh()->eticketPool()->count());
+        $req = TicketRequest::create([
+            'event_id' => $this->event->id, 'email' => 'a@example.com', 'attendees' => ['Ana'], 'quantity' => 1, 'status' => 'pending', 'locale' => 'ro',
+        ]);
+        $this->actingAs($owner)->withHeader('X-Locale', 'ro')
+            ->postJson("/api/requests/{$req->id}/approve", ['attendees' => [['name' => 'Ana', 'guest_category' => 'parent']]])
+            ->assertStatus(422)->assertJsonFragment(['message' => 'Setează mai întâi intervalul de numere pentru e-bilete (de ex. 101–150) în setările evenimentului.']);
+        $this->assertSame(0, Ticket::where('event_id', $this->event->id)->whereNotNull('sold_at')->count());
+
+        // With the range the lowest free number inside it is used.
+        $this->event->update(['eticket_from' => 101, 'eticket_to' => 150]);
+        $this->actingAs($owner)->postJson("/api/requests/{$req->id}/approve", ['attendees' => [['name' => 'Ana', 'guest_category' => 'parent']]])->assertOk();
+        $this->assertSame(101, Ticket::where('request_id', $req->id)->value('ticket_number'));
+    }
 }

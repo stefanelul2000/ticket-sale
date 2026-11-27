@@ -534,7 +534,7 @@ export const en: Record<keyof typeof ro, string> = {
   'eticket.from': 'From number',
   'eticket.to': 'To number',
   'eticket.max': 'Tickets per request',
-  'eticket.rangeHint': 'Invitations in this range are used as e-tickets (e.g. 101–150). They can be printed too: the same number gets in only once. Empty = any free invitation.',
+  'eticket.rangeHint': 'Invitations in this range are used as e-tickets (e.g. 101–150). They can be printed too: the same number gets in only once. Required: e-tickets are only taken from this range, so invitations already printed for others are never used.',
   'eticket.message': 'Message in the e-ticket email (optional)',
   'eticket.messageHint': 'E.g. when doors open or where to park.',
   'eticket.linkTitle': 'Request link',
