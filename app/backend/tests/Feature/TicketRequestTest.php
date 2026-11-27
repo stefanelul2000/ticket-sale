@@ -416,4 +416,20 @@ class TicketRequestTest extends TestCase
         $this->actingAs($manager)->postJson("/api/requests/{$req->id}/send")->assertOk();
         $this->assertNotNull(Ticket::where('request_id', $req->id)->value('emailed_at'));
     }
+
+    public function test_refunding_the_last_ticket_cancels_the_request(): void
+    {
+        Mail::fake();
+        $this->ask()->assertCreated();
+        $req = TicketRequest::first();
+        $manager = $this->userWithRole(4);
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['Maria Popescu', 'Ion Popescu'])])->assertOk();
+        [$a, $b] = Ticket::where('request_id', $req->id)->orderBy('ticket_number')->pluck('ticket_code')->all();
+
+        $this->actingAs($manager)->postJson("/api/tickets/{$a}/refund")->assertOk();
+        $this->assertSame('approved', $req->fresh()->status); // one ticket left
+
+        $this->actingAs($manager)->postJson("/api/tickets/{$b}/refund")->assertOk();
+        $this->assertSame('cancelled', $req->fresh()->status);
+    }
 }

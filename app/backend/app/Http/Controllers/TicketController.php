@@ -401,6 +401,11 @@ class TicketController extends Controller
             return response()->json(['message' => __('Ticket changed meanwhile; reload and try again.')], 409);
         }
 
+        // An online request whose last ticket was just refunded is cancelled as a whole.
+        if ($previous['request_id'] && ! Ticket::where('request_id', $previous['request_id'])->exists()) {
+            TicketRequest::whereKey($previous['request_id'])->where('status', 'approved')->update(['status' => 'cancelled', 'updated_at' => Carbon::now()]);
+        }
+
         // Tickets that went out by email: optionally tell the holder.
         $notified = false;
         $req = $previous['request_id'] ? TicketRequest::find($previous['request_id']) : null;
