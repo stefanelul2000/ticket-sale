@@ -120,7 +120,9 @@ Route::middleware(['auth:sanctum', 'active', 'impersonate'])->group(function () 
 
     // Assigning invitations (volunteers and up)
     Route::middleware('role:3')->group(function () {
+        Route::get('/events/{eventId}/design', [EventController::class, 'design'])->whereNumber('eventId');
         Route::post('/tickets/{ticketCode}/sell', [TicketController::class, 'sell']);
+        Route::post('/tickets/{ticketCode}/email', [TicketController::class, 'email'])->middleware('throttle:30,1');
         Route::patch('/tickets/{ticketCode}', [TicketController::class, 'update']);
     });
 });

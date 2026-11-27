@@ -91,13 +91,14 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
     try {
       const res = await api.tickets({ event_id: event.id, per_page: 2000, sort });
       const rows: unknown[][] = [
-        [t('field.number'), t('field.ticketCode'), t('field.guestName'), t('field.category'), t('field.ticketType'), t('field.status'), t('tickets.assignedBy'), t('tickets.assignedAt'), t('tickets.checkedInAt'), t('tickets.scannedBy')],
+        [t('field.number'), t('field.ticketCode'), t('field.guestName'), t('field.email'), t('field.category'), t('field.ticketType'), t('field.status'), t('tickets.assignedBy'), t('tickets.assignedAt'), t('tickets.checkedInAt'), t('tickets.scannedBy')],
       ];
       for (const r of res.data as TicketRow[]) {
         rows.push([
           r.ticket_number,
           r.ticket_code,
           r.name ?? '',
+          r.email ?? '',
           r.sold_at ? t(categoryKey(r.guest_category)) : '',
           r.ticket_type?.name ?? '',
           statusText(r),
@@ -227,6 +228,11 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
                         <div className="text-xs text-soft">
                           {[r.sold_at && r.guest_category ? t(categoryKey(r.guest_category)) : null, r.ticket_type?.name].filter(Boolean).join(' · ')}
                         </div>
+                        {r.email && (
+                          <div className={clsx('text-xs', r.emailed_at ? 'text-ok' : 'text-soft')} title={r.emailed_at ? t('assign.emailedAt', { when: fmtDateTime(r.emailed_at) }) : undefined}>
+                            {r.emailed_at ? '✓ ' : ''}{r.email}
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-mono text-xs">{r.ticket_code}</td>
                       <td className="px-4 py-3">{statusBadge(r)}</td>
@@ -283,7 +289,7 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
           </div>
         </>
       )}
-      {editing && <EditGuestModal ticket={editing} onClose={() => setEditing(null)} onSaved={() => load()} />}
+      {editing && <EditGuestModal ticket={editing} eventId={event.id} mailConfigured={!!counts?.mail_configured} onClose={() => setEditing(null)} onSaved={() => load()} />}
       {refunding && (
         <Modal
           open
@@ -292,7 +298,7 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
           footer={
             <>
               <Button variant="ghost" onClick={() => setRefunding(null)}>{t('common.cancel')}</Button>
-              <Button variant="danger" loading={busy === refunding.id} onClick={() => refund(refunding, !!refunding.request_id && !!counts?.mail_configured && notify)}>
+              <Button variant="danger" loading={busy === refunding.id} onClick={() => refund(refunding, !!(refunding.request_id || refunding.emailed_at) && !!counts?.mail_configured && notify)}>
                 {t('guest.refund')}
               </Button>
             </>
@@ -304,7 +310,7 @@ export function GuestsTab({ event, onChanged }: { event: EventT; onChanged: () =
                 ? t('guest.refundConfirmCheckedIn', { code: refunding.ticket_code, name: refunding.name ?? '—' })
                 : t('guest.refundConfirm', { code: refunding.ticket_code, name: refunding.name ?? '—' })}
             </p>
-            {refunding.request_id ? (
+            {refunding.request_id || refunding.emailed_at ? (
               counts?.mail_configured ? (
                 <label className="flex items-start gap-2">
                   <input type="checkbox" checked={notify} onChange={(e) => setNotify(e.target.checked)} className="mt-0.5 h-4 w-4 accent-[var(--a-accent)]" />

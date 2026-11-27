@@ -67,6 +67,7 @@
   "You can approve at most :n tickets for this request.": "Poți aproba cel mult :n bilete pentru această cerere.",
   "Approve the request first.": "Aprobă mai întâi cererea.",
   "Email sending is not configured yet.": "Trimiterea emailurilor nu este încă configurată.",
+  "This invitation has no email address.": "Această invitație nu are o adresă de email.",
   "This request has no tickets anymore.": "Cererea nu mai are bilete.",
   "The email could not be sent: :error": "Emailul nu a putut fi trimis: :error",
   "Only approved requests can be cancelled.": "Doar cererile aprobate pot fi anulate.",

@@ -2,7 +2,7 @@
 
 namespace App\Mail;
 
-use App\Models\TicketRequest;
+use App\Models\Event;
 use App\Support\Organization;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -20,18 +20,17 @@ class ETicketMail extends Mailable
      * @param  list<array{bytes: string, name: string, mime: string}>  $designs  designed e-ticket images rendered in the browser
      */
     public function __construct(
-        public TicketRequest $ticketRequest,
+        public Event $event,
         public Collection $tickets,
         public array $designs = [],
+        string $locale = 'ro',
     ) {
-        $this->locale($ticketRequest->locale ?: 'ro');
+        $this->locale($locale ?: 'ro');
     }
 
     public function envelope(): Envelope
     {
-        $event = $this->ticketRequest->event;
-
-        return new Envelope(subject: __('Your e-ticket: :event', ['event' => $event->name]));
+        return new Envelope(subject: __('Your e-ticket: :event', ['event' => $this->event->name]));
     }
 
     public function content(): Content
@@ -39,11 +38,11 @@ class ETicketMail extends Mailable
         $org = Organization::get();
 
         return new Content(view: 'emails.eticket', with: [
-            'event' => $this->ticketRequest->event,
+            'event' => $this->event,
             'tickets' => $this->tickets,
             'org' => $org,
             'publicUrl' => $org['public_url'],
-            'donationUrl' => $this->ticketRequest->event->donation_url ?: $org['donation_url'],
+            'donationUrl' => $this->event->donation_url ?: $org['donation_url'],
         ]);
     }
 

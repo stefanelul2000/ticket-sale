@@ -235,6 +235,7 @@ function activityLabel(t: ReturnType<typeof useT>, it: ActivityItem) {
   }
   if (it.action === 'sell') return it.success ? t('activity.assigned') : s.includes('already') ? t('activity.alreadyAssigned') : s.includes('wrong') ? t('activity.wrongEvent') : t('activity.notFound');
   if (it.action === 'refund') return t('activity.released');
+  if (it.action === 'email') return t('activity.emailed');
   return it.success ? t('activity.verifiedOk') : t('activity.verifiedBad');
 }
 

@@ -4,8 +4,7 @@ import { useT } from '../../../i18n';
 import { api, errorMessage } from '../../../lib/api';
 import { fmtDateTime, fmtNumber } from '../../../lib/format';
 import { ticketUrl } from '../../../lib/ticketCode';
-import { prepareFonts, renderTicketImages } from '../../../lib/ticketPrint';
-import { canvasBlob, renderTemplateCanvas } from '../../../lib/templateRender';
+import { renderEticketDesign } from '../../../lib/eticketDesign';
 import { useSettings } from '../../../state/useSettings';
 import { toast } from '../../../state/useToast';
 import type { EventT, TicketRequestT } from '../../../types';
@@ -67,36 +66,11 @@ export function RequestsTab({ event, onChanged }: { event: EventT; onChanged: ()
   const linksText = (r: TicketRequestT) =>
     [t('reqs.shareIntro', { event: event.name }), ...(r.tickets ?? []).map((tk) => `${tk.name ?? ''}: ${ticketUrl(publicUrl, tk.ticket_code)}`)].join('\n');
 
-  /** The event's designed e-ticket for each ticket (custom design, else the standard card), small JPEG/PNG. */
+  /** The event's designed e-ticket for each ticket (custom design, else the standard card). */
   const renderDesigns = async (r: TicketRequestT): Promise<Blob[]> => {
-    const tickets = r.tickets ?? [];
+    const ctx = { publicUrl, orgName: settings.name, labels: { guest: t('print.guestLabel'), scanHint: t('print.scanHint') } };
     const out: Blob[] = [];
-    await prepareFonts();
-    const tpl = event.print_template?.elements?.length ? event.print_template : null;
-    for (const tk of tickets) {
-      const pt = { ticket_code: tk.ticket_code, ticket_number: tk.ticket_number, name: tk.name ?? null, ticket_type: event.ticket_types?.[0]?.name };
-      if (tpl) {
-        const full = await renderTemplateCanvas(tpl, pt, { publicUrl, eventSlug: event.slug, photosUrl: event.photos_url });
-        const scale = Math.min(1, 1600 / full.width);
-        const small = document.createElement('canvas');
-        small.width = Math.round(full.width * scale);
-        small.height = Math.round(full.height * scale);
-        const c = small.getContext('2d')!;
-        c.imageSmoothingQuality = 'high';
-        c.drawImage(full, 0, 0, small.width, small.height);
-        out.push(await canvasBlob(small, 'image/jpeg', 0.86));
-      } else {
-        const imgs = await renderTicketImages(pt, {
-          eventName: event.name,
-          dateLine: '',
-          publicUrl,
-          orgName: settings.name,
-          labels: { guest: t('print.guestLabel'), scanHint: t('print.scanHint') },
-          pad: 3,
-        });
-        out.push(imgs.combined);
-      }
-    }
+    for (const tk of r.tickets ?? []) out.push(await renderEticketDesign(event, tk, ctx));
     return out;
   };
 

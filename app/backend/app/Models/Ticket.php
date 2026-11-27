@@ -18,6 +18,8 @@ class Ticket extends Model
         'user_id',
         'name',
         'guest_category',
+        'email',
+        'emailed_at',
         'sold_at',
         'checkin',
         'checked_in_at',
@@ -30,6 +32,7 @@ class Ticket extends Model
         'sold_at' => 'datetime',
         'checkin' => 'boolean',
         'checked_in_at' => 'datetime',
+        'emailed_at' => 'datetime',
         'is_walk_in' => 'boolean',
     ];
 

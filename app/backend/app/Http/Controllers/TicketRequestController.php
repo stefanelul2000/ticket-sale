@@ -185,6 +185,8 @@ class TicketRequestController extends Controller
                     'user_id' => $userId,
                     'sold_at' => $now,
                     'request_id' => $req->id,
+                    'email' => $req->email,
+                    'emailed_at' => null,
                     'updated_at' => $now,
                 ]);
                 TicketActivityLog::create([
@@ -256,7 +258,7 @@ class TicketRequestController extends Controller
         }
 
         try {
-            Mail::to($req->email)->send(new ETicketMail($req, $tickets, $designs));
+            Mail::to($req->email)->send(new ETicketMail($req->event, $tickets, $designs, $req->locale));
         } catch (\Throwable $e) {
             report($e);
             $req->update(['send_error' => mb_substr($e->getMessage(), 0, 500)]);
@@ -265,6 +267,7 @@ class TicketRequestController extends Controller
         }
 
         $req->update(['sent_at' => Carbon::now(), 'send_count' => $req->send_count + 1, 'send_error' => null]);
+        Ticket::whereIn('id', $tickets->pluck('id'))->update(['emailed_at' => Carbon::now()]);
         $this->logAdminAction($request->user()?->id, 'request.send', ['request_id' => $req->id, 'tickets' => $tickets->count()]);
 
         return response()->json($req->fresh()->load(['tickets:id,request_id,ticket_code,ticket_number,name,checkin', 'decider:id,name']));
@@ -319,6 +322,8 @@ class TicketRequestController extends Controller
                 'guest_category' => null,
                 'user_id' => null,
                 'sold_at' => null,
+                'email' => null,
+                'emailed_at' => null,
                 'request_id' => null,
                 'updated_at' => Carbon::now(),
             ]);

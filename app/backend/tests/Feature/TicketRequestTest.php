@@ -354,4 +354,66 @@ class TicketRequestTest extends TestCase
         $this->actingAs($owner)->postJson("/api/requests/{$req->id}/approve", ['attendees' => [['name' => 'Ana', 'guest_category' => 'parent']]])->assertOk();
         $this->assertSame(101, Ticket::where('request_id', $req->id)->value('ticket_number'));
     }
+
+    public function test_printed_invitation_with_optional_email_is_also_sent_as_eticket(): void
+    {
+        Mail::fake();
+        $volunteer = $this->userWithRole(3);
+        $other = $this->userWithRole(3);
+        $manager = $this->userWithRole(4);
+        [$t1, $t2] = Ticket::where('event_id', $this->event->id)->orderBy('ticket_number')->limit(2)->get()->all();
+
+        // Email is optional.
+        $this->actingAs($volunteer)->postJson("/api/tickets/{$t1->ticket_code}/sell", ['name' => 'Fara Email', 'event_id' => $this->event->id])
+            ->assertOk()->assertJson(['email' => null]);
+        $this->actingAs($volunteer)->postJson("/api/tickets/{$t1->ticket_code}/email")->assertStatus(422);
+
+        // Invalid address is rejected, valid one is stored normalised.
+        $this->actingAs($volunteer)->withHeader('X-Locale', 'ro')->postJson("/api/tickets/{$t2->ticket_code}/sell", ['name' => 'Ana', 'email' => 'nu-e-email', 'event_id' => $this->event->id])
+            ->assertStatus(422)->assertJsonValidationErrors('email');
+        $this->actingAs($volunteer)->postJson("/api/tickets/{$t2->ticket_code}/sell", ['name' => 'Ana', 'email' => ' Ana@Example.COM ', 'event_id' => $this->event->id])
+            ->assertOk()->assertJson(['email' => 'ana@example.com', 'emailed_at' => null, 'is_eticket' => false]);
+
+        // Another volunteer cannot mail it; the one who assigned it can, with the design attached.
+        $this->actingAs($other)->postJson("/api/tickets/{$t2->ticket_code}/email")->assertForbidden();
+        $this->actingAs($volunteer)->post("/api/tickets/{$t2->ticket_code}/email", [
+            'designs' => [UploadedFile::fake()->image('d.jpg', 800, 280)],
+        ], ['Accept' => 'application/json'])->assertOk();
+        Mail::assertSent(ETicketMail::class, fn (ETicketMail $m) => $m->hasTo('ana@example.com') && $m->tickets->count() === 1
+            && $m->tickets[0]->ticket_code === $t2->ticket_code && count($m->designs) === 1);
+        $this->assertNotNull($t2->fresh()->emailed_at);
+        // Still a printed invitation: the door does not ask to hand out paper again.
+        $this->assertNull($t2->fresh()->request_id);
+
+        // Changing the address resets "emailed".
+        $this->actingAs($volunteer)->patchJson("/api/tickets/{$t2->ticket_code}", ['email' => 'nou@example.com'])->assertOk()->assertJson(['email' => 'nou@example.com', 'emailed_at' => null]);
+        $this->actingAs($manager)->postJson("/api/tickets/{$t2->ticket_code}/email")->assertOk();
+        Mail::assertSent(ETicketMail::class, fn (ETicketMail $m) => $m->hasTo('nou@example.com'));
+
+        // Visible in the list / search and the export.
+        $this->actingAs($manager)->getJson("/api/tickets?event_id={$this->event->id}&search=nou@exa")->assertOk()->assertJsonPath('data.0.email', 'nou@example.com');
+        $this->actingAs($manager)->getJson("/api/events/{$this->event->id}/tickets")->assertOk()->assertJsonFragment(['email' => 'nou@example.com']);
+
+        // Refund can tell the guest, and clears the address.
+        $this->actingAs($manager)->postJson("/api/tickets/{$t2->ticket_code}/refund", ['notify' => true])->assertOk()->assertJson(['notified' => true]);
+        Mail::assertSent(TicketCancelledMail::class, fn ($m) => $m->hasTo('nou@example.com'));
+        $this->assertNull($t2->fresh()->email);
+
+        // Mail not configured -> clear answer, ticket stays assigned.
+        config(['mail.default' => 'log']);
+        $this->actingAs($volunteer)->postJson("/api/tickets/{$t2->ticket_code}/sell", ['name' => 'Ana', 'email' => 'ana@example.com', 'event_id' => $this->event->id])->assertOk();
+        $this->actingAs($volunteer)->postJson("/api/tickets/{$t2->ticket_code}/email")->assertStatus(409)->assertJson(['result' => 'mail_not_configured']);
+    }
+
+    public function test_approved_requests_store_the_email_on_each_ticket(): void
+    {
+        Mail::fake();
+        $this->ask()->assertCreated();
+        $req = TicketRequest::first();
+        $manager = $this->userWithRole(4);
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/approve", ['attendees' => $this->guests(['Maria Popescu'])])->assertOk();
+        $this->assertSame('parinte@example.com', Ticket::where('request_id', $req->id)->value('email'));
+        $this->actingAs($manager)->postJson("/api/requests/{$req->id}/send")->assertOk();
+        $this->assertNotNull(Ticket::where('request_id', $req->id)->value('emailed_at'));
+    }
 }

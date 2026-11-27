@@ -46,6 +46,16 @@ class EventController extends Controller
         ]);
     }
 
+    /** What the assigning desk needs to render an event's designed e-ticket (no guest data). */
+    public function design(int $eventId)
+    {
+        $event = Event::findOrFail($eventId, ['id', 'name', 'slug', 'photos_url', 'print_template']);
+
+        return response()->json($event->only(['id', 'name', 'slug', 'photos_url', 'print_template']) + [
+            'ticket_types' => $event->ticketTypes()->orderBy('sort')->orderBy('id')->get(['id', 'name']),
+        ]);
+    }
+
     /**
      * Lightweight list for pickers (door, assigning, reports).
      */

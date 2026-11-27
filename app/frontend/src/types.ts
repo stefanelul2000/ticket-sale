@@ -76,6 +76,8 @@ export type TicketInfo = {
   ticket_number: number;
   name?: string | null;
   guest_category?: string | null;
+  email?: string | null;
+  emailed_at?: string | null;
   sold: boolean;
   sold_at?: string | null;
   checkin: boolean;
@@ -95,6 +97,8 @@ export type TicketRow = {
   ticket_code: string;
   name?: string | null;
   guest_category?: string | null;
+  email?: string | null;
+  emailed_at?: string | null;
   sold_at?: string | null;
   checkin: boolean;
   checked_in_at?: string | null;
@@ -110,7 +114,7 @@ export type ActivityItem = {
   id: number;
   event_id?: number | null;
   ticket_code?: string | null;
-  action: 'verify' | 'checkin' | 'sell' | 'refund';
+  action: 'verify' | 'checkin' | 'sell' | 'refund' | 'email';
   status: string;
   success: boolean;
   name?: string | null;

@@ -147,9 +147,16 @@ export const api = {
     client.get(`/tickets/${code(ticketCode)}/verify`, { params: event_id ? { event_id } : undefined }).then((r) => r.data),
   checkin: (ticketCode: string, event_id?: number | null) =>
     client.post(`/tickets/${code(ticketCode)}/checkin`, event_id ? { event_id } : {}).then((r) => r.data),
-  sell: (ticketCode: string, payload: { name: string; guest_category?: string | null; event_id?: number | null }) =>
+  sell: (ticketCode: string, payload: { name: string; guest_category?: string | null; email?: string | null; event_id?: number | null }) =>
     client.post(`/tickets/${code(ticketCode)}/sell`, payload).then((r) => r.data),
-  updateTicket: (ticketCode: string, payload: { name?: string; guest_category?: string | null }) =>
+  /** Email an assigned (printed) invitation to its guest as an e-ticket too. */
+  emailTicket: (ticketCode: string, design?: Blob | null) => {
+    const form = new FormData();
+    if (design) form.append('designs[]', design, `invitatie.${design.type === 'image/png' ? 'png' : 'jpg'}`);
+    return client.post(`/tickets/${code(ticketCode)}/email`, form).then((r) => r.data);
+  },
+  eventDesign: (eventId: number) => client.get(`/events/${eventId}/design`).then((r) => r.data),
+  updateTicket: (ticketCode: string, payload: { name?: string; guest_category?: string | null; email?: string | null }) =>
     client.patch(`/tickets/${code(ticketCode)}`, payload).then((r) => r.data),
   refund: (ticketCode: string, notify = false) => client.post(`/tickets/${code(ticketCode)}/refund`, { notify }).then((r) => r.data),
   stats: (event_id?: number | null) => client.get('/stats', { params: event_id ? { event_id } : undefined }).then((r) => r.data),

@@ -6,6 +6,7 @@ import { normalizeTicketCode } from '../../lib/ticketCode';
 import { categoryKey } from '../../lib/constants';
 import { fmtNumber, fmtTime } from '../../lib/format';
 import { useCurrentEvent } from '../../state/useCurrentEvent';
+import { EMAIL_RE, useSendTicketEmail } from '../../lib/useSendTicketEmail';
 import { toast } from '../../state/useToast';
 import type { TicketInfo } from '../../types';
 import { Button } from '../components/ui/Button';
@@ -26,11 +27,13 @@ export function AssignPage() {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [category, setCategory] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
   const [saving, setSaving] = useState(false);
   const [camera, setCamera] = useState(false);
   const [recent, setRecent] = useState<TicketInfo[]>([]);
   const [editing, setEditing] = useState<TicketInfo | null>(null);
-  const [counts, setCounts] = useState<{ total: number; sold: number } | null>(null);
+  const [counts, setCounts] = useState<{ total: number; sold: number; mail_configured?: boolean } | null>(null);
+  const sendEmail = useSendTicketEmail();
   const codeRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
 
@@ -69,17 +72,31 @@ export function AssignPage() {
       nameRef.current?.focus();
       return;
     }
+    const mail = email.trim();
+    if (mail && !EMAIL_RE.test(mail)) {
+      toast(t('assign.emailInvalid'), 'warn');
+      return;
+    }
     setSaving(true);
     try {
-      const tk: TicketInfo = await api.sell(ticketCode, { name: name.trim(), guest_category: category, event_id: eventId });
+      const tk: TicketInfo = await api.sell(ticketCode, { name: name.trim(), guest_category: category, email: mail || null, event_id: eventId });
       setRecent((r) => [tk, ...r].slice(0, 20));
       toast(t('assign.done', { name: tk.name ?? '', code: tk.ticket_code }), 'ok');
       feedback('ok');
       setCode('');
       setName('');
       setCategory(null);
+      setEmail('');
       refresh();
       setTimeout(() => codeRef.current?.focus(), 30);
+      if (tk.email) {
+        if (counts?.mail_configured) {
+          const sent = await sendEmail(eventId, tk);
+          if (sent) setRecent((list) => list.map((x) => (x.id === sent.id ? sent : x)));
+        } else {
+          toast(t('assign.emailNoMail'), 'warn');
+        }
+      }
     } catch (err) {
       feedback('bad');
       toast(errorMessage(err, t('common.error')), 'danger');
@@ -139,6 +156,20 @@ export function AssignPage() {
                 />
               )}
               <Input ref={nameRef} label={t('field.guestName')} value={name} maxLength={255} onChange={(e) => setName(e.target.value)} className="h-12 text-lg" />
+              <Input
+                label={t('field.emailOptional')}
+                type="email"
+                inputMode="email"
+                autoComplete="off"
+                autoCapitalize="none"
+                spellCheck={false}
+                maxLength={255}
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="nume@exemplu.ro"
+                className="h-12 text-lg"
+                hint={counts && counts.mail_configured === false ? t('assign.emailHintNoMail') : t('assign.emailHint')}
+              />
               <div>
                 <div className="mb-1.5 text-sm font-semibold">{t('field.categoryOptional')}</div>
                 <CategoryChips value={category} onChange={setCategory} />
@@ -163,6 +194,11 @@ export function AssignPage() {
                       <span className="font-mono">{r.ticket_code}</span>
                       {r.guest_category ? ` · ${t(categoryKey(r.guest_category))}` : ''} · {fmtTime(r.sold_at)}
                     </div>
+                    {r.email && (
+                      <div className={`truncate text-xs ${r.emailed_at ? 'text-ok' : 'text-soft'}`}>
+                        {r.emailed_at ? '✓ ' : ''}{r.email}
+                      </div>
+                    )}
                   </div>
                   <button type="button" className="text-sm font-semibold text-accent hover:underline" onClick={() => setEditing(r)}>
                     {t('common.edit')}
@@ -176,6 +212,8 @@ export function AssignPage() {
       {editing && (
         <EditGuestModal
           ticket={editing}
+          eventId={eventId}
+          mailConfigured={!!counts?.mail_configured}
           onClose={() => setEditing(null)}
           onSaved={(tk) => setRecent((list) => list.map((x) => (x.id === tk.id ? tk : x)))}
         />
@@ -186,26 +224,43 @@ export function AssignPage() {
 
 export function EditGuestModal({
   ticket,
+  eventId,
+  mailConfigured = false,
   onClose,
   onSaved,
 }: {
-  ticket: { ticket_code: string; name?: string | null; guest_category?: string | null };
+  ticket: { ticket_code: string; name?: string | null; guest_category?: string | null; email?: string | null; emailed_at?: string | null };
+  eventId?: number | null;
+  mailConfigured?: boolean;
   onClose: () => void;
   onSaved: (t: TicketInfo) => void;
 }) {
   const t = useT();
   const [name, setName] = useState(ticket.name ?? '');
   const [category, setCategory] = useState<string | null>(ticket.guest_category ?? null);
+  const [email, setEmail] = useState(ticket.email ?? '');
+  const [sendNow, setSendNow] = useState(!ticket.emailed_at);
   const [saving, setSaving] = useState(false);
+  const sendEmail = useSendTicketEmail();
+  const mail = email.trim().toLowerCase();
+  const mailChanged = mail !== (ticket.email ?? '');
+  const canSend = mailConfigured && !!mail && EMAIL_RE.test(mail);
 
   const save = async (e?: FormEvent) => {
     e?.preventDefault();
     if (!name.trim()) return;
+    if (mail && !EMAIL_RE.test(mail)) {
+      toast(t('assign.emailInvalid'), 'warn');
+      return;
+    }
     setSaving(true);
     try {
-      const tk = await api.updateTicket(ticket.ticket_code, { name: name.trim(), guest_category: category });
-      onSaved(tk);
+      let tk: TicketInfo = await api.updateTicket(ticket.ticket_code, { name: name.trim(), guest_category: category, email: mail || null });
       toast(t('common.saved'), 'ok');
+      if (canSend && sendNow) {
+        tk = (await sendEmail(eventId, tk)) ?? tk;
+      }
+      onSaved(tk);
       onClose();
     } catch (err) {
       toast(errorMessage(err, t('common.error')), 'danger');
@@ -228,6 +283,27 @@ export function EditGuestModal({
     >
       <form onSubmit={save} className="space-y-4">
         <Input label={t('field.guestName')} value={name} maxLength={255} onChange={(e) => setName(e.target.value)} />
+        <Input
+          label={t('field.emailOptional')}
+          type="email"
+          inputMode="email"
+          autoComplete="off"
+          autoCapitalize="none"
+          spellCheck={false}
+          maxLength={255}
+          value={email}
+          onChange={(e) => {
+            setEmail(e.target.value);
+            if (e.target.value.trim().toLowerCase() !== (ticket.email ?? '')) setSendNow(true);
+          }}
+          hint={ticket.emailed_at && !mailChanged ? t('assign.emailedAt', { when: fmtTime(ticket.emailed_at) }) : undefined}
+        />
+        {canSend && (
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4 accent-[var(--a-accent)]" checked={sendNow} onChange={(e) => setSendNow(e.target.checked)} />
+            {ticket.emailed_at && !mailChanged ? t('assign.emailResend') : t('assign.emailSendNow')}
+          </label>
+        )}
         <div>
           <div className="mb-1.5 text-sm font-semibold">{t('field.categoryOptional')}</div>
           <CategoryChips value={category} onChange={setCategory} />

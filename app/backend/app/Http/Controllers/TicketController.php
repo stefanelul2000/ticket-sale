@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Event;
 use App\Models\Ticket;
+use App\Mail\ETicketMail;
 use App\Mail\TicketCancelledMail;
 use App\Models\TicketActivityLog;
 use App\Models\TicketRequest;
@@ -49,8 +50,10 @@ class TicketController extends Controller
                 $term = trim((string) $request->get('search'));
                 $code = TicketCode::normalize($term);
                 $q->where(function ($inner) use ($term, $code) {
+                    $like = '%'.addcslashes($term, '%_\\').'%';
                     $inner->where('ticket_code', $code)
-                        ->orWhere('name', 'like', '%'.addcslashes($term, '%_\\').'%');
+                        ->orWhere('name', 'like', $like)
+                        ->orWhere('email', 'like', $like);
                     if (ctype_digit($term)) {
                         $inner->orWhere('ticket_number', (int) $term);
                     }
@@ -226,7 +229,7 @@ class TicketController extends Controller
             ->where('event_id', $event->id)
             ->when($data['ticket_type_id'] ?? null, fn ($q, $tt) => $q->where('ticket_type_id', $tt))
             ->orderBy('ticket_number')
-            ->get(['id', 'ticket_code', 'ticket_number', 'ticket_type_id', 'name', 'guest_category', 'sold_at', 'checkin', 'checked_in_at', 'is_walk_in']);
+            ->get(['id', 'ticket_code', 'ticket_number', 'ticket_type_id', 'name', 'guest_category', 'email', 'emailed_at', 'request_id', 'sold_at', 'checkin', 'checked_in_at', 'is_walk_in']);
 
         return response()->json([
             'event' => $event->only(['id', 'name', 'slug', 'starts_at', 'venue', 'city']),
@@ -238,6 +241,9 @@ class TicketController extends Controller
                 'ticket_type' => $t->ticketType?->name,
                 'name' => $t->name,
                 'guest_category' => $t->guest_category,
+                'email' => $t->email,
+                'emailed_at' => $t->emailed_at,
+                'is_eticket' => $t->request_id !== null,
                 'sold' => $t->isSold(),
                 'sold_at' => $t->sold_at,
                 'checkin' => $t->checkin,
@@ -252,9 +258,11 @@ class TicketController extends Controller
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'guest_category' => ['nullable', GuestCategory::rule()],
+            'email' => self::EMAIL_RULE,
             'event_id' => ['required', 'integer'],
         ]);
         $name = trim($data['name']);
+        $email = self::cleanEmail($data['email'] ?? null);
 
         $ticket = $this->findTicketByCode($ticketCode);
         if (! $ticket) {
@@ -275,6 +283,8 @@ class TicketController extends Controller
             ->update([
                 'name' => $name,
                 'guest_category' => $data['guest_category'] ?? null,
+                'email' => $email,
+                'emailed_at' => null,
                 'user_id' => $request->user()->id,
                 'sold_at' => Carbon::now(),
                 'updated_at' => Carbon::now(),
@@ -306,6 +316,7 @@ class TicketController extends Controller
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'guest_category' => ['sometimes', 'nullable', GuestCategory::rule()],
+            'email' => ['sometimes', ...self::EMAIL_RULE],
         ]);
 
         $ticket = $this->findTicketByCode($ticketCode);
@@ -324,9 +335,15 @@ class TicketController extends Controller
             }
         }
 
-        $before = $ticket->only(['name', 'guest_category']);
+        $before = $ticket->only(['name', 'guest_category', 'email']);
         if (array_key_exists('name', $data)) {
             $data['name'] = trim($data['name']);
+        }
+        if (array_key_exists('email', $data)) {
+            $data['email'] = self::cleanEmail($data['email']);
+            if ($data['email'] !== $ticket->email) {
+                $data['emailed_at'] = null; // a new address has not received it yet
+            }
         }
         $data['updated_at'] = Carbon::now();
         // Atomic: never write a name onto a ticket that was released meanwhile.
@@ -362,7 +379,7 @@ class TicketController extends Controller
             return response()->json(['message' => __('Ticket is not assigned yet.')], 409);
         }
 
-        $previous = $ticket->only(['name', 'checkin', 'checked_in_at', 'request_id', 'is_walk_in']);
+        $previous = $ticket->only(['name', 'checkin', 'checked_in_at', 'request_id', 'is_walk_in', 'email', 'emailed_at']);
         $updated = Ticket::whereKey($ticket->id)
             ->whereNotNull('sold_at')
             ->update([
@@ -375,6 +392,8 @@ class TicketController extends Controller
                 'checked_in_by' => null,
                 'is_walk_in' => false,
                 'request_id' => null,
+                'email' => null,
+                'emailed_at' => null,
                 'updated_at' => Carbon::now(),
             ]);
 
@@ -382,21 +401,20 @@ class TicketController extends Controller
             return response()->json(['message' => __('Ticket changed meanwhile; reload and try again.')], 409);
         }
 
-        // E-tickets: optionally tell the holder (paper invitations have no contact data).
+        // Tickets that went out by email: optionally tell the holder.
         $notified = false;
-        if ($notify && $previous['request_id'] && TicketRequestController::mailConfigured()) {
-            $req = TicketRequest::find($previous['request_id']);
-            if ($req) {
-                try {
-                    Mail::to($req->email)->send(new TicketCancelledMail(
-                        $ticket->event,
-                        [['name' => $previous['name'], 'number' => $ticket->ticket_number, 'code' => $ticket->ticket_code]],
-                        $req->locale,
-                    ));
-                    $notified = true;
-                } catch (\Throwable $e) {
-                    report($e);
-                }
+        $req = $previous['request_id'] ? TicketRequest::find($previous['request_id']) : null;
+        $to = $req?->email ?? ($previous['emailed_at'] ? $previous['email'] : null);
+        if ($notify && $to && TicketRequestController::mailConfigured()) {
+            try {
+                Mail::to($to)->send(new TicketCancelledMail(
+                    $ticket->event,
+                    [['name' => $previous['name'], 'number' => $ticket->ticket_number, 'code' => $ticket->ticket_code]],
+                    $req?->locale ?? 'ro',
+                ));
+                $notified = true;
+            } catch (\Throwable $e) {
+                report($e);
             }
         }
 
@@ -602,6 +620,72 @@ class TicketController extends Controller
         ], 409);
     }
 
+    private const EMAIL_RULE = ['nullable', 'string', 'email:rfc', 'max:255'];
+
+    private static function cleanEmail(?string $email): ?string
+    {
+        $email = $email !== null ? mb_strtolower(trim($email)) : null;
+
+        return $email === '' ? null : $email;
+    }
+
+    /**
+     * Email an assigned ticket (e.g. a printed invitation) to the guest's address as an e-ticket too.
+     * Optional designs[] = the event's designed invitation rendered in the browser.
+     */
+    public function email(Request $request, string $ticketCode)
+    {
+        $request->validate([
+            'designs' => ['nullable', 'array', 'max:1'],
+            'designs.*' => ['file', 'mimes:jpg,jpeg,png', 'max:1024'],
+        ]);
+
+        $ticket = $this->findTicketByCode($ticketCode);
+        if (! $ticket) {
+            return response()->json(['message' => __('Ticket not found.')], 404);
+        }
+        if (! $ticket->isSold()) {
+            return response()->json(['message' => __('Ticket is not assigned yet.')], 409);
+        }
+        if (! $ticket->email) {
+            return response()->json(['message' => __('This invitation has no email address.')], 422);
+        }
+        $actor = $request->user();
+        if ((int) $actor->role_id < 4 && (int) $ticket->user_id !== (int) $actor->id) {
+            return response()->json(['message' => __('Only the volunteer who assigned this invitation (or a manager) can change it.')], 403);
+        }
+        if (! TicketRequestController::mailConfigured()) {
+            return response()->json(['message' => __('Email sending is not configured yet.'), 'result' => 'mail_not_configured'], 409);
+        }
+
+        $designs = [];
+        foreach ($request->file('designs', []) as $file) {
+            $info = @getimagesize($file->getRealPath());
+            if (! $info || ! in_array($info[2], [IMAGETYPE_JPEG, IMAGETYPE_PNG], true)) {
+                return response()->json(['message' => __('The file is not a valid image.')], 422);
+            }
+            $isPng = $info[2] === IMAGETYPE_PNG;
+            $designs[] = [
+                'bytes' => (string) file_get_contents($file->getRealPath()),
+                'name' => sprintf('invitatie-%03d.%s', $ticket->ticket_number, $isPng ? 'png' : 'jpg'),
+                'mime' => $isPng ? 'image/png' : 'image/jpeg',
+            ];
+        }
+
+        try {
+            Mail::to($ticket->email)->send(new ETicketMail($ticket->event, collect([$ticket]), $designs, app()->getLocale()));
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json(['message' => __('The email could not be sent: :error', ['error' => mb_substr($e->getMessage(), 0, 200)])], 502);
+        }
+
+        $ticket->forceFill(['emailed_at' => Carbon::now()])->save();
+        $this->recordActivity($request, 'email', $ticket->ticket_code, 'E-ticket emailed', true, $ticket->name);
+
+        return response()->json($this->present($ticket->refresh()));
+    }
+
     private function findTicketByCode(string $input): ?Ticket
     {
         $code = TicketCode::normalize($input);
@@ -624,6 +708,8 @@ class TicketController extends Controller
             'ticket_type' => $ticket->ticketType?->only(['id', 'name', 'kind']),
             'name' => $ticket->name,
             'guest_category' => $ticket->guest_category,
+            'email' => $ticket->email,
+            'emailed_at' => $ticket->emailed_at,
             'sold' => $ticket->isSold(),
             'sold_at' => $ticket->sold_at,
             'checkin' => $ticket->checkin,
